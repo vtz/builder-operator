@@ -1,0 +1,7 @@
+domain: mycompany.io
+layout:
+- go.kubebuilder.io/v4
+multigroup: false
+projectName: builder-operator
+repo: github.com/example/builder-operator
+version: "3"

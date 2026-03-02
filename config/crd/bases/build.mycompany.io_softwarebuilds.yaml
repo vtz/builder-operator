@@ -1,0 +1,181 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: softwarebuilds.build.mycompany.io
+spec:
+  group: build.mycompany.io
+  names:
+    kind: SoftwareBuild
+    listKind: SoftwareBuildList
+    plural: softwarebuilds
+    singular: softwarebuild
+    shortNames:
+      - sb
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - source
+                - stages
+                - destination
+              properties:
+                runtime:
+                  type: object
+                  properties:
+                    image:
+                      type: string
+                      default: ubuntu:24.04
+                    serviceAccountName:
+                      type: string
+                source:
+                  type: object
+                  required:
+                    - type
+                  properties:
+                    type:
+                      type: string
+                      enum: [git, pvc, hostPath]
+                    git:
+                      type: object
+                      required: [url]
+                      properties:
+                        url:
+                          type: string
+                        revision:
+                          type: string
+                          default: main
+                        credentialsSecretRef:
+                          type: object
+                          required: [name]
+                          properties:
+                            name: { type: string }
+                            key: { type: string }
+                    pvc:
+                      type: object
+                      required: [claimName]
+                      properties:
+                        claimName: { type: string }
+                        path:
+                          type: string
+                          default: /
+                    hostPath:
+                      type: object
+                      required: [path]
+                      properties:
+                        path: { type: string }
+                stages:
+                  type: object
+                  required: [fetch, prebuild, build, postbuild, deploy]
+                  properties:
+                    fetch:
+                      type: object
+                      required: [command]
+                      properties:
+                        command: { type: string }
+                        image: { type: string }
+                    prebuild:
+                      type: object
+                      required: [command]
+                      properties:
+                        command: { type: string }
+                        image: { type: string }
+                    build:
+                      type: object
+                      required: [command]
+                      properties:
+                        command: { type: string }
+                        image: { type: string }
+                    postbuild:
+                      type: object
+                      required: [command]
+                      properties:
+                        command: { type: string }
+                        image: { type: string }
+                    deploy:
+                      type: object
+                      required: [command]
+                      properties:
+                        command: { type: string }
+                        image: { type: string }
+                destination:
+                  type: object
+                  required: [type]
+                  properties:
+                    type:
+                      type: string
+                      enum: [sharedFolder, registry, artifactory, quay]
+                    path: { type: string }
+                    repository: { type: string }
+                    credentialsSecretRef:
+                      type: object
+                      required: [name]
+                      properties:
+                        name: { type: string }
+                        key: { type: string }
+                timeoutSeconds:
+                  type: integer
+                  format: int64
+                  minimum: 1
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [Pending, Running, Succeeded, Failed]
+                currentPipelineRun:
+                  type: string
+                artifactURI:
+                  type: string
+                failureReason:
+                  type: string
+                stages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: { type: string }
+                      state: { type: string }
+                      message: { type: string }
+                      startedAt:
+                        type: string
+                        format: date-time
+                      finishedAt:
+                        type: string
+                        format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                      - lastTransitionTime
+                      - reason
+                      - message
+                    properties:
+                      type: { type: string }
+                      status: { type: string }
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason: { type: string }
+                      message: { type: string }
+                      observedGeneration:
+                        type: integer
+                        format: int64
+      subresources:
+        status: {}

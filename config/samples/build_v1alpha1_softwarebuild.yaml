@@ -1,0 +1,29 @@
+apiVersion: build.mycompany.io/v1alpha1
+kind: SoftwareBuild
+metadata:
+  name: hello-cpp
+  namespace: hello-demo
+spec:
+  runtime:
+    image: ubuntu:24.04
+  source:
+    type: git
+    git:
+      url: https://github.com/example/repo.git
+      revision: main
+      credentialsSecretRef:
+        name: github-creds
+  stages:
+    fetch:
+      command: apt-get update && apt-get install -y git && git clone https://github.com/example/repo.git fetched/repo
+    prebuild:
+      command: mkdir -p generated bin output && cp fetched/repo/main.cpp generated/hello-world.cpp
+    build:
+      command: apt-get update && apt-get install -y g++ && g++ generated/hello-world.cpp -o bin/hello-world
+    postbuild:
+      command: ./bin/hello-world && test -f output/output.txt
+    deploy:
+      command: mkdir -p /host-build/deployment/{generated,bin,output} && cp generated/hello-world.cpp /host-build/deployment/generated/ && cp bin/hello-world /host-build/deployment/bin/ && cp output/output.txt /host-build/deployment/output/
+  destination:
+    type: sharedFolder
+    path: /host-build/deployment

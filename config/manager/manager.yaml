@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: builder-operator-controller-manager
+  namespace: builder-operator-system
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      serviceAccountName: builder-operator-controller-manager
+      containers:
+        - name: manager
+          image: controller:latest
+          command:
+            - /manager
+          args:
+            - --leader-elect
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi

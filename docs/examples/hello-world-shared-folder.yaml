@@ -1,0 +1,26 @@
+apiVersion: build.mycompany.io/v1alpha1
+kind: SoftwareBuild
+metadata:
+  name: hello-world-shared-folder
+  namespace: hello-demo
+spec:
+  runtime:
+    image: gcc:13
+  source:
+    type: hostPath
+    hostPath:
+      path: /workspace
+  stages:
+    fetch:
+      command: mkdir -p fetched generated bin output && cp /host-samples/hello-world-input.txt fetched/hello-world-input.txt
+    prebuild:
+      command: cp fetched/hello-world-input.txt generated/hello-world.cpp
+    build:
+      command: g++ generated/hello-world.cpp -o bin/hello-world
+    postbuild:
+      command: ./bin/hello-world && test -f output/output.txt
+    deploy:
+      command: mkdir -p /host-build/deployment/generated /host-build/deployment/bin /host-build/deployment/output && cp generated/hello-world.cpp /host-build/deployment/generated/ && cp bin/hello-world /host-build/deployment/bin/ && cp output/output.txt /host-build/deployment/output/
+  destination:
+    type: sharedFolder
+    path: /host-build/deployment

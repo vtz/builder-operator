@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: builder-operator-manager-role
+rules:
+  - apiGroups: ["build.mycompany.io"]
+    resources: ["softwarebuilds", "softwarebuilds/status", "softwarebuilds/finalizers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events", "secrets"]
+    verbs: ["get", "list", "watch", "create", "patch"]

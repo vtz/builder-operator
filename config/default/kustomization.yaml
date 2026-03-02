@@ -1,0 +1,4 @@
+resources:
+  - ../crd/bases/build.mycompany.io_softwarebuilds.yaml
+  - ../rbac/role.yaml
+  - ../manager/manager.yaml

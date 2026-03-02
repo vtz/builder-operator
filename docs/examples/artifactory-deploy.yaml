@@ -1,0 +1,29 @@
+apiVersion: build.mycompany.io/v1alpha1
+kind: SoftwareBuild
+metadata:
+  name: artifactory-deploy-example
+  namespace: hello-demo
+spec:
+  runtime:
+    image: ubuntu:24.04
+  source:
+    type: git
+    git:
+      url: https://github.com/example/repo.git
+      revision: main
+  stages:
+    fetch:
+      command: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git && git clone https://github.com/example/repo.git fetched/repo
+    prebuild:
+      command: mkdir -p generated dist && cp fetched/repo/main.cpp generated/main.cpp
+    build:
+      command: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ && g++ generated/main.cpp -o dist/app
+    postbuild:
+      command: tar -czf dist/app.tar.gz -C dist app
+    deploy:
+      command: echo "Upload dist/app.tar.gz to artifactory using injected credentials"
+  destination:
+    type: artifactory
+    repository: https://artifactory.example.com/artifactory/my-repo
+    credentialsSecretRef:
+      name: artifactory-creds

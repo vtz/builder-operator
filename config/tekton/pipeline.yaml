@@ -1,0 +1,158 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: configurable-build-pipeline
+  namespace: hello-demo
+spec:
+  params:
+    - name: containerImage
+      type: string
+      default: ubuntu:24.04
+    - name: fetchCommand
+      type: string
+    - name: prebuildCommand
+      type: string
+    - name: buildCommand
+      type: string
+    - name: postbuildCommand
+      type: string
+    - name: deployCommand
+      type: string
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: fetch
+      taskSpec:
+        params:
+          - name: image
+          - name: command
+        workspaces:
+          - name: ws
+        volumes:
+          - name: host-samples
+            hostPath:
+              path: /host-samples
+              type: Directory
+        steps:
+          - name: run
+            image: $(params.image)
+            volumeMounts:
+              - name: host-samples
+                mountPath: /host-samples
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+              cd $(workspaces.ws.path)
+              bash -lc "$(params.command)"
+      params:
+        - name: image
+          value: $(params.containerImage)
+        - name: command
+          value: $(params.fetchCommand)
+      workspaces:
+        - name: ws
+          workspace: shared-workspace
+    - name: prebuild
+      runAfter: [fetch]
+      taskSpec:
+        params:
+          - name: image
+          - name: command
+        workspaces:
+          - name: ws
+        steps:
+          - name: run
+            image: $(params.image)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+              cd $(workspaces.ws.path)
+              bash -lc "$(params.command)"
+      params:
+        - name: image
+          value: $(params.containerImage)
+        - name: command
+          value: $(params.prebuildCommand)
+      workspaces:
+        - name: ws
+          workspace: shared-workspace
+    - name: build
+      runAfter: [prebuild]
+      taskSpec:
+        params:
+          - name: image
+          - name: command
+        workspaces:
+          - name: ws
+        steps:
+          - name: run
+            image: $(params.image)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+              cd $(workspaces.ws.path)
+              bash -lc "$(params.command)"
+      params:
+        - name: image
+          value: $(params.containerImage)
+        - name: command
+          value: $(params.buildCommand)
+      workspaces:
+        - name: ws
+          workspace: shared-workspace
+    - name: postbuild
+      runAfter: [build]
+      taskSpec:
+        params:
+          - name: image
+          - name: command
+        workspaces:
+          - name: ws
+        steps:
+          - name: run
+            image: $(params.image)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+              cd $(workspaces.ws.path)
+              bash -lc "$(params.command)"
+      params:
+        - name: image
+          value: $(params.containerImage)
+        - name: command
+          value: $(params.postbuildCommand)
+      workspaces:
+        - name: ws
+          workspace: shared-workspace
+    - name: deploy
+      runAfter: [postbuild]
+      taskSpec:
+        params:
+          - name: image
+          - name: command
+        workspaces:
+          - name: ws
+        volumes:
+          - name: host-build
+            hostPath:
+              path: /host-build
+              type: Directory
+        steps:
+          - name: run
+            image: $(params.image)
+            volumeMounts:
+              - name: host-build
+                mountPath: /host-build
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+              cd $(workspaces.ws.path)
+              bash -lc "$(params.command)"
+      params:
+        - name: image
+          value: $(params.containerImage)
+        - name: command
+          value: $(params.deployCommand)
+      workspaces:
+        - name: ws
+          workspace: shared-workspace
