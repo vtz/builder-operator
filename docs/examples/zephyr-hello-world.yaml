@@ -1,0 +1,28 @@
+apiVersion: build.mycompany.io/v1alpha1
+kind: SoftwareBuild
+metadata:
+  name: zephyr-hello-world
+  namespace: hello-demo
+spec:
+  runtime:
+    image: ghcr.io/zephyrproject-rtos/ci-base:latest
+  source:
+    type: git
+    git:
+      url: https://github.com/zephyrproject-rtos/zephyr.git
+      revision: main
+  timeoutSeconds: 1800
+  stages:
+    fetch:
+      command: west init --mr main fetched && cd fetched && west update --narrow -o=--depth=1
+    prebuild:
+      command: cd fetched && west list
+    build:
+      command: cd fetched && ZEPHYR_TOOLCHAIN_VARIANT=host west build -p always -b native_sim/native/64 zephyr/samples/hello_world
+    postbuild:
+      command: cd fetched && timeout 5 ./build/zephyr/zephyr.exe || true
+    deploy:
+      command: mkdir -p /host-build/deployment/zephyr-hello-world && cp fetched/build/zephyr/zephyr.exe /host-build/deployment/zephyr-hello-world/ && cp fetched/build/zephyr/zephyr.elf /host-build/deployment/zephyr-hello-world/ && cp fetched/build/zephyr/zephyr.map /host-build/deployment/zephyr-hello-world/ 2>/dev/null || true
+  destination:
+    type: sharedFolder
+    path: /host-build/deployment/zephyr-hello-world
