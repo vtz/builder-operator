@@ -41,7 +41,7 @@ kubectl get softwarebuild "${CR_NAME}" -n "${NAMESPACE}" -o jsonpath='{.status.p
 kubectl get taskruns -n "${NAMESPACE}" -l "tekton.dev/pipelineRun=${RUN}"
 
 echo "Artifacts:"
-ls -lR "${ROOT_DIR}/deployment/zephyr-hello-world/" 2>/dev/null || echo "No artifacts found"
+ls -lR "${ROOT_DIR}/deployment/deployment/zephyr-hello-world/" 2>/dev/null || echo "No artifacts found"
 
 PIPELINE_END=$(date +%s)
 echo "Total time: $((PIPELINE_END - PIPELINE_START))s"
