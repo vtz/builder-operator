@@ -1,0 +1,1505 @@
+<mxfile host="app.diagrams.net" modified="2026-02-07T12:00:00.000Z" agent="Draw.io" version="24.0.0" type="device">
+    <diagram id="operator-arch" name="1 - Builder Operator Architecture">
+        <mxGraphModel dx="939" dy="787" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="oa_title" value="Pluggable Builder Operator — Internal Architecture" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="700" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_subtitle" value="One operator, multiple strategies. The build step is pluggable; everything else is shared infrastructure." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="55" width="750" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr_group" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="100" width="260" height="280" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr_l" value="&lt;b&gt;AutomotiveBuild CRs&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="75" y="108" width="230" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr_desc" value="Custom Resources created by developers&lt;br&gt;or CI/CD pipelines via &lt;b&gt;oc apply&lt;/b&gt; or &lt;b&gt;git push&lt;/b&gt;" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="75" y="135" width="230" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="180" width="220" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr1_l" value="zonal-controller-soc (image-builder)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="188" width="220" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="225" width="220" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr2_l" value="body-controller-mcu (container-build)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="233" width="220" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="270" width="220" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr3_l" value="ivi-android-aaos (android-soong)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="278" width="220" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="315" width="220" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_cr4_l" value="qnx-cockpit (qnx-sdp)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="323" width="220" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_a_cr_op" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="320" y="240" as="sourcePoint"/>
+                        <mxPoint x="390" y="240" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="oa_a_cr_op_l" value="watch" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="330" y="220" width="50" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_operator" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="100" width="580" height="680" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_op_l" value="&lt;b&gt;Automotive Builder Operator&lt;/b&gt;" style="text;html=1;fontSize=16;fontStyle=1;fontFamily=Red Hat Text;fontColor=#0066CC;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="410" y="108" width="350" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_common" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="150" width="520" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_common_l" value="&lt;b&gt;Common Orchestration&lt;/b&gt; (same for all strategies)" style="text;html=1;fontSize=12;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="435" y="158" width="400" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="190" width="140" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c1_l" value="&lt;b&gt;1. Fetch Source&lt;/b&gt;&lt;br&gt;git clone" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="195" width="140" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c1a" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="580" y="212" as="sourcePoint"/>
+                        <mxPoint x="600" y="212" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="oa_c2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="190" width="140" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c2_l" value="&lt;b&gt;2. Read BuildSpec&lt;/b&gt;&lt;br&gt;(optional)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="195" width="140" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c2a" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="740" y="212" as="sourcePoint"/>
+                        <mxPoint x="760" y="212" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="oa_c3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="190" width="140" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c3_l" value="&lt;b&gt;3. License Setup&lt;/b&gt;&lt;br&gt;(if proprietary)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="195" width="140" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_dispatch_arrow" value="" style="endArrow=block;html=1;strokeColor=#EE0000;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="680" y="235" as="sourcePoint"/>
+                        <mxPoint x="680" y="290" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="oa_dispatch_l" value="&lt;b&gt;strategy dispatch&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#EE0000;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="250" width="130" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c_sbom" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="260" width="100" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c_sbom_l" value="&lt;b&gt;5. SBOM&lt;/b&gt;&lt;br&gt;Syft → SPDX" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="265" width="100" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c_sign" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="555" y="260" width="100" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c_sign_l" value="&lt;b&gt;6. Sign&lt;/b&gt;&lt;br&gt;Sigstore / TAS" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="555" y="265" width="100" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c_prov" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="310" width="215" height="12" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_c_prov_l" value="&lt;b&gt;7. Provenance&lt;/b&gt; (SLSA L3)" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="308" width="215" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_strategies" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#EE0000;strokeWidth=2;dashed=1;dashPattern=8 8;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="360" width="520" height="230" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_strat_l" value="&lt;b&gt;4. BUILD — Pluggable Strategy&lt;/b&gt; (the variable part)" style="text;html=1;fontSize=12;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="435" y="368" width="450" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_strat_desc" value="Each strategy = a container image + invocation logic. Adding a new toolchain = adding a new strategy class." style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="435" y="390" width="490" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="420" width="230" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s1_l" value="&lt;b&gt;image-builder&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="425" width="230" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s1_d" value="caib — RHIVOS/RHEL from blueprints&lt;br&gt;osbuild, RPM repos, TOML spec&lt;br&gt;&lt;b&gt;SHIPPED (existing path)&lt;/b&gt;" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="448" width="230" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="690" y="420" width="230" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s2_l" value="&lt;b&gt;container-build&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="690" y="425" width="230" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s2_d" value="Generic — any toolchain in a container&lt;br&gt;GCC ARM, IAR, GHS, CMake, Bazel&lt;br&gt;&lt;b&gt;Universal escape hatch&lt;/b&gt;" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="690" y="448" width="230" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="505" width="230" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s3_l" value="&lt;b&gt;android-soong&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="510" width="230" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s3_d" value="Android AAOS via Soong/Ninja&lt;br&gt;lunch target, envsetup.sh, CTS/VTS&lt;br&gt;system.img, vendor.img output" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="533" width="230" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="690" y="505" width="230" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s4_l" value="&lt;b&gt;qnx-sdp&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="690" y="510" width="230" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_s4_d" value="QNX via SDP/Momentics&lt;br&gt;qcc, mkifs, FlexLM licensing&lt;br&gt;IFS image output" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="690" y="533" width="230" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_publish" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="610" width="520" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_publish_l" value="&lt;b&gt;8. Publish to Registry&lt;/b&gt; (Quay / Artifactory)" style="text;html=1;fontSize=12;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="618" width="520" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_publish_d" value="Artifact + SBOM + Signature + Provenance → OCI registry, tagged, immutable" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="642" width="520" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_notify" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="690" width="520" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_notify_l" value="&lt;b&gt;9. Notify&lt;/b&gt; (Slack / Email) + &lt;b&gt;Update CR Status&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="420" y="698" width="520" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_status_arrow" value="" style="endArrow=block;html=1;strokeColor=#707070;strokeWidth=1;rounded=1;endFill=1;dashed=1;dashPattern=3 3;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="420" y="710" as="sourcePoint"/>
+                        <mxPoint x="190" y="380" as="targetPoint"/>
+                        <Array as="points">
+                            <mxPoint x="190" y="710"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="oa_status_l" value="status update" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="700" width="80" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_key" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="420" width="260" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_key_l" value="&lt;b&gt;Key Insight&lt;/b&gt;" style="text;html=1;fontSize=12;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="75" y="428" width="150" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_key_d" value="Steps 1–3, 5–9 are &lt;b&gt;identical&lt;/b&gt; for all&lt;br&gt;toolchains. Only step 4 (BUILD)&lt;br&gt;differs — and it's a pluggable&lt;br&gt;container.&lt;br&gt;&lt;br&gt;Adding a new toolchain = adding&lt;br&gt;a new strategy class + registering it." style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="75" y="455" width="230" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="820" width="60" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="845" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg1_l" value="Shipped (existing caib)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="844" width="140" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="845" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg2_l" value="New strategy (proposed)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="280" y="844" width="140" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="845" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg3_l" value="Common infrastructure" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="470" y="844" width="130" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#EE0000;strokeWidth=2;dashed=1;dashPattern=8 8;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="845" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="oa_leg4_l" value="Pluggable / variable" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="844" width="130" height="18" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="rhas-extended" name="2 - RHAS Extended — Three Operators">
+        <mxGraphModel dx="853" dy="787" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="re_title" value="RHAS Extended — Pluggable Builder + Jumpstarter + Compliance" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="800" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_subtitle" value="Same RHAS cluster — the builder operator gains multiple strategies; Jumpstarter and compliance are unchanged." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="55" width="800" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_dev" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="95" width="1200" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_dev_l" value="&lt;b&gt;Developer Workstation&lt;/b&gt; — CLI-first: &lt;b&gt;git&lt;/b&gt;, &lt;b&gt;oc&lt;/b&gt;, &lt;b&gt;jmp&lt;/b&gt;, &lt;b&gt;podman&lt;/b&gt;. Same commands for Linux, MCU, Android, QNX." style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="113" width="1200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_a_dev" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="700" y="160" as="sourcePoint"/>
+                        <mxPoint x="700" y="195" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="re_a_dev_l" value="oc apply / git push / jmp" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="168" width="150" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_cluster" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#707070;dashed=1;dashPattern=8 8;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="195" width="1280" height="430" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_cluster_l" value="&lt;b&gt;OpenShift Cluster (RHAS)&lt;/b&gt;" style="text;html=1;fontSize=16;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="203" width="300" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_builder" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="245" width="480" height="350" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_builder_l" value="&lt;b&gt;Builder Operator (extended)&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="253" width="350" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_common" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="290" width="440" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_common_l" value="Common: Fetch → &lt;b&gt;strategy dispatch&lt;/b&gt; → SBOM → Sign → Publish" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="298" width="440" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="345" width="210" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_s1_l" value="&lt;b&gt;image-builder&lt;/b&gt;&lt;br&gt;Linux/RHIVOS (caib)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="352" width="210" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="345" width="210" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_s2_l" value="&lt;b&gt;container-build&lt;/b&gt;&lt;br&gt;MCU / generic" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="352" width="210" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="415" width="210" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_s3_l" value="&lt;b&gt;android-soong&lt;/b&gt;&lt;br&gt;AAOS" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="422" width="210" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="415" width="210" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_s4_l" value="&lt;b&gt;qnx-sdp&lt;/b&gt;&lt;br&gt;QNX IFS" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="422" width="210" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_eco" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;dashed=1;dashPattern=3 3;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="485" width="440" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_eco_l" value="&lt;b&gt;Ecosystem:&lt;/b&gt; BitBake (Yocto), Bazel, Tasking (AURIX), GHS (RH850)..." style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="495" width="440" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_b_eco_d" value="Added by OEMs via container-build strategy — no operator changes needed" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="508" width="440" height="14" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_compliance" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="600" y="245" width="280" height="350" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_compliance_l" value="&lt;b&gt;Compliance Layer&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="253" width="220" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_d" value="Shared across all strategies" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="278" width="200" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_sbom" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="310" width="240" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_sbom_l" value="&lt;b&gt;SBOM&lt;/b&gt; (Syft → SPDX / CycloneDX)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="322" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_sign" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="370" width="240" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_sign_l" value="&lt;b&gt;Signing&lt;/b&gt; (Sigstore / Trusted Artifact Signer)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="382" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_reg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="430" width="240" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_reg_l" value="&lt;b&gt;Registry&lt;/b&gt; (Quay / Artifactory)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="442" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_prov" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="490" width="240" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_prov_l" value="&lt;b&gt;Provenance&lt;/b&gt; (SLSA L3 attestation)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="502" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_trace" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#63993D;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="550" width="240" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_comp_trace_l" value="&lt;b&gt;Traceability:&lt;/b&gt; field → artifact → Git" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="556" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_jumpstarter" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0066CC;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="910" y="245" width="400" height="350" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_jumpstarter_l" value="&lt;b&gt;Jumpstarter Operator&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="253" width="300" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_d" value="Unchanged — already target-agnostic" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="278" width="250" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_virt" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="310" width="360" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_virt_l" value="&lt;b&gt;Virtual ECU&lt;/b&gt;&lt;br&gt;QEMU ARM64 (SoC) · Renode (MCU) · Cloud ARM64" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="318" width="360" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_phys" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="380" width="360" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_phys_l" value="&lt;b&gt;Physical Lab&lt;/b&gt;&lt;br&gt;dutlink · probe-rs · CAN bus · Serial" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="388" width="360" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_lease" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="450" width="360" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_lease_l" value="&lt;b&gt;Lab Management&lt;/b&gt;&lt;br&gt;Exporter discovery · Lease mgmt · Auth · gRPC" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="458" width="360" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_proto" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="520" width="360" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_js_proto_l" value="&lt;b&gt;Protocol Drivers (planned)&lt;/b&gt;&lt;br&gt;UDS · XCP · SOME/IP" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="930" y="528" width="360" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_targets" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0066CC;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="660" width="1000" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_targets_l" value="&lt;b&gt;Vehicle ECU&lt;/b&gt; — SoC (Linux / QNX / AAOS) + MCU (Cortex-M/R / AURIX / RH850)" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="673" width="1000" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_key" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="740" width="1280" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_key_l" value="&lt;b&gt;The builder operator is the only component that changes.&lt;/b&gt; Jumpstarter already handles any target. Compliance already handles any artifact. The strategy pattern extends the builder without touching the rest of RHAS." style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="70" y="750" width="1260" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="810" width="60" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="835" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg1_l" value="Shipped / existing" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="834" width="120" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="230" y="835" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg2_l" value="Extended / new" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="260" y="834" width="100" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0066CC;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="835" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg3_l" value="Jumpstarter (unchanged)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="410" y="834" width="150" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;dashed=1;dashPattern=3 3;" parent="1" vertex="1">
+                    <mxGeometry x="580" y="835" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="re_leg4_l" value="Ecosystem / planned" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="610" y="834" width="130" height="18" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="reconcile-flow" name="3 - CRD/CR Reconciliation Flow">
+        <mxGraphModel dx="939" dy="787" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="rf_title" value="CRD / CR Reconciliation Flow" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="500" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_subtitle" value="What happens when a developer creates an AutomotiveBuild CR — from oc apply to signed artifact in registry" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="55" width="750" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_dev" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="110" width="180" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_dev_l" value="&lt;b&gt;Developer / CI&lt;/b&gt;&lt;br&gt;oc apply -f build.yaml&lt;br&gt;or git push → webhook" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="118" width="180" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_a1" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="240" y="145" as="sourcePoint"/>
+                        <mxPoint x="310" y="145" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rf_a1_l" value="create CR" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="243" y="128" width="60" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_api" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="310" y="110" width="160" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_api_l" value="&lt;b&gt;K8s API Server&lt;/b&gt;&lt;br&gt;Validates against CRD&lt;br&gt;Stores CR in etcd" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="310" y="118" width="160" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_a2" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="470" y="145" as="sourcePoint"/>
+                        <mxPoint x="540" y="145" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rf_a2_l" value="event" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="480" y="128" width="50" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_reconciler" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0066CC;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="110" width="200" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_reconciler_l" value="&lt;b&gt;Reconciler&lt;/b&gt;&lt;br&gt;Watches AutomotiveBuild CRs&lt;br&gt;Calls reconcile() on each event" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="118" width="200" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_a3" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="640" y="180" as="sourcePoint"/>
+                        <mxPoint x="640" y="230" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rf_pipeline" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="230" width="1260" height="530" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_pipeline_l" value="&lt;b&gt;Reconciliation Pipeline&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="238" width="300" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="280" width="160" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s1_l" value="&lt;b&gt;1. Fetch Source&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="290" width="160" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s1_d" value="git clone into workspace PVC&lt;br&gt;Auth via Secret" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="312" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s1_status" value="phase: FetchingSource" style="text;html=1;fontSize=7;fontFamily=Courier New;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="345" width="160" height="12" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_sa1" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="260" y="320" as="sourcePoint"/>
+                        <mxPoint x="310" y="320" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rf_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="310" y="280" width="160" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s2_l" value="&lt;b&gt;2. Resolve Strategy&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="310" y="290" width="160" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s2_d" value="Look up strategy from&lt;br&gt;STRATEGY_REGISTRY&lt;br&gt;Read buildspec (optional)" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="310" y="312" width="160" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_sa2" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="470" y="320" as="sourcePoint"/>
+                        <mxPoint x="520" y="320" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rf_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#EE0000;strokeWidth=2;dashed=1;dashPattern=8 8;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="280" width="270" height="190" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s3_l" value="&lt;b&gt;3. BUILD (strategy)&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="290" width="270" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s3_d" value="The ONLY step that varies per toolchain" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#EE0000;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="312" width="270" height="15" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s3_pod" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="335" width="230" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s3_pod_l" value="&lt;b&gt;Build Pod&lt;/b&gt;" style="text;html=1;fontSize=10;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="555" y="340" width="100" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s3_pod_c" value="Container: toolchain image&lt;br&gt;(caib / gcc-arm / soong / qcc)" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="555" y="360" width="200" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s3_pod_v" value="Volume: workspace PVC&lt;br&gt;(cloned source + build output)" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="555" y="390" width="200" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s3_pod_o" value="Output: .elf / .img / .ifs / qcow2" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="555" y="420" width="200" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s3_status" value="phase: Building" style="text;html=1;fontSize=7;fontFamily=Courier New;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="455" width="270" height="12" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_sa3" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="790" y="370" as="sourcePoint"/>
+                        <mxPoint x="840" y="370" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rf_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="280" width="160" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s4_l" value="&lt;b&gt;4. Unit Test&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="290" width="160" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s4_d" value="Run tests from buildspec&lt;br&gt;Same container, same toolchain" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="312" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s4_status" value="phase: Testing" style="text;html=1;fontSize=7;fontFamily=Courier New;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="345" width="160" height="12" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_sa4" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1000" y="320" as="sourcePoint"/>
+                        <mxPoint x="1050" y="320" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rf_s5" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="280" width="230" height="190" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s5_l" value="&lt;b&gt;5. Compliance&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="288" width="230" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s5_sbom" value="SBOM (Syft → SPDX)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="1070" y="318" width="180" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s5_sign" value="Sign (Sigstore / TAS)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="1070" y="340" width="180" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s5_prov" value="Provenance (SLSA L3)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="1070" y="362" width="180" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s5_push" value="Push to Quay / Artifactory" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="1070" y="384" width="180" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_s5_status" value="phase: GeneratingSBOM → Signing → Publishing" style="text;html=1;fontSize=7;fontFamily=Courier New;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1050" y="455" width="230" height="12" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_done" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#63993D;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="510" width="1180" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_done_l" value="&lt;b&gt;6. Done&lt;/b&gt; — CR status updated: phase: Succeeded" style="text;html=1;fontSize=12;fontStyle=1;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="520" width="1180" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_done_d" value="status.artifact: { registry, tag, digest, sbomRef, signatureRef, provenanceRef }" style="text;html=1;fontSize=9;fontFamily=Courier New;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="545" width="1180" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_oc_get" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="610" width="1180" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_oc_get_l" value="&lt;b&gt;Developer sees:&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="618" width="200" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="rf_oc_get_d" value="$ oc get abuild&lt;br&gt;NAME                   STRATEGY         PHASE       AGE    ARTIFACT&lt;br&gt;zonal-controller-soc   image-builder    Succeeded   11m    feature-can-v2-7x4kl&lt;br&gt;body-controller-mcu    container-build  Succeeded   3m     fix-window-lifter-9a2mn&lt;br&gt;ivi-android-aaos       android-soong    Building    45m    —&lt;br&gt;qnx-cockpit            qnx-sdp          Succeeded   8m     v2.0.0-b3c4d5e" style="text;html=1;fontSize=9;fontFamily=Courier New;fontColor=#151515;align=left;spacing=5;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="645" width="1140" height="80" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="dev-experience" name="4 - Developer Experience Parity">
+        <mxGraphModel dx="939" dy="787" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="dx_title" value="Developer Experience Parity — Same Workflow, Any Toolchain" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="800" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_subtitle" value="Four targets, one workflow. Only the toolchain container (highlighted) differs." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="55" width="600" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_h_step" value="&lt;b&gt;Pipeline Stage&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="100" width="140" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_h_linux" value="&lt;b&gt;Linux / RHIVOS&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="100" width="280" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_h_mcu" value="&lt;b&gt;MCU (Cortex-M7)&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="100" width="280" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_h_android" value="&lt;b&gt;Android AAOS&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="100" width="280" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_h_qnx" value="&lt;b&gt;QNX&lt;/b&gt;" style="text;html=1;fontSize=11;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="100" width="260" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_l" value="&lt;b&gt;Trigger&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="145" width="140" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="140" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_1_l" value="git push → webhook" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="148" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="140" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_2_l" value="git push → webhook" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="148" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="140" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_3_l" value="git push → webhook" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="148" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="140" width="260" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r1_4_l" value="git push → webhook" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="148" width="260" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_l" value="&lt;b&gt;Fetch&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="200" width="140" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="195" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_1_l" value="git clone" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="203" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="195" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_2_l" value="git clone" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="203" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="195" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_3_l" value="git clone" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="203" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="195" width="260" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r2_4_l" value="git clone" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="203" width="260" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_l" value="&lt;b&gt;BUILD&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#EE0000&quot;&gt;(differs)&lt;/font&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="260" width="140" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="255" width="280" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_1_l" value="&lt;b&gt;image-builder&lt;/b&gt;&lt;br&gt;Blueprint → osbuild → qcow2/raw&lt;br&gt;&lt;i&gt;(SHIPPED — existing caib)&lt;/i&gt;" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="265" width="280" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="255" width="280" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_2_l" value="&lt;b&gt;container-build&lt;/b&gt;&lt;br&gt;GCC ARM → cmake → .elf/.hex&lt;br&gt;&lt;i&gt;(generic strategy)&lt;/i&gt;" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="265" width="280" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="255" width="280" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_3_l" value="&lt;b&gt;android-soong&lt;/b&gt;&lt;br&gt;envsetup → lunch → m → system.img&lt;br&gt;&lt;i&gt;(named strategy)&lt;/i&gt;" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="265" width="280" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="255" width="260" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r3_4_l" value="&lt;b&gt;qnx-sdp&lt;/b&gt;&lt;br&gt;qcc → mkifs → .ifs&lt;br&gt;&lt;i&gt;(named strategy)&lt;/i&gt;" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="265" width="260" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_l" value="&lt;b&gt;Unit Test&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="360" width="140" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="355" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_1_l" value="Google Test / pytest" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="363" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="355" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_2_l" value="Unity / CppUTest" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="363" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="355" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_3_l" value="atest / CTS / VTS" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="363" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="355" width="260" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r4_4_l" value="qnx-test" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="363" width="260" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_l" value="&lt;b&gt;SBOM&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="415" width="140" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="410" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_1_l" value="Syft → SPDX JSON" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="418" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="410" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_2_l" value="Syft → SPDX JSON" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="418" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="410" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_3_l" value="Syft → SPDX JSON" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="418" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="410" width="260" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r5_4_l" value="Syft → SPDX JSON" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="418" width="260" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_l" value="&lt;b&gt;Sign&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="470" width="140" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="465" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_1_l" value="Sigstore" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="473" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="465" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_2_l" value="Sigstore" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="473" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="465" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_3_l" value="Sigstore" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="473" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="465" width="260" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r6_4_l" value="Sigstore" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="473" width="260" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_l" value="&lt;b&gt;Publish&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="525" width="140" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="520" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_1_l" value="Quay / Artifactory" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="528" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="520" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_2_l" value="Quay / Artifactory" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="528" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="520" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_3_l" value="Quay / Artifactory" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="528" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="520" width="260" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r7_4_l" value="Quay / Artifactory" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="528" width="260" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_l" value="&lt;b&gt;Output&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="580" width="140" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="575" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_1_l" value="qcow2 / raw / OSTree" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="583" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="575" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_2_l" value=".elf / .hex binary" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="583" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="575" width="280" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_3_l" value="system.img / vendor.img" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="800" y="583" width="280" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="575" width="260" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r8_4_l" value="QNX IFS image" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1100" y="583" width="260" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r9_l" value="&lt;b&gt;Runs on&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="635" width="140" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r9" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0066CC;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="630" width="1160" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_r9_l2" value="&lt;b&gt;OpenShift&lt;/b&gt; — same cluster, same operators, same CLI" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="638" width="1160" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_key" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="700" width="1300" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_key_l" value="&lt;b&gt;The BUILD row is the only row that differs.&lt;/b&gt; Everything else — trigger, fetch, SBOM, sign, publish, registry — is identical.&lt;br&gt;One CRD, one operator, one compliance chain. Only the toolchain container changes." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="70" y="712" width="1280" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_leg_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="800" width="60" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_leg1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="825" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_leg1_l" value="Identical across all targets" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="824" width="160" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_leg2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="270" y="825" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_leg2_l" value="Shipped (caib) / compliance" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="300" y="824" width="170" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_leg3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="490" y="825" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="dx_leg3_l" value="New strategy (the only difference)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="824" width="200" height="18" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="option-b-tekton" name="5 - Option B: Tekton as Execution Engine">
+        <mxGraphModel dx="939" dy="787" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="ob_title" value="Option B: Tekton Pipelines + Operator as Orchestrator" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="700" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_subtitle" value="The operator manages a dedicated namespace with pre-built Tekton Pipelines. Developers don't interact with Tekton directly." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="55" width="800" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_dev" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="95" width="1200" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_dev_l" value="&lt;b&gt;Developer / CI&lt;/b&gt; — &lt;b&gt;caib build&lt;/b&gt;, &lt;b&gt;oc apply&lt;/b&gt;, or &lt;b&gt;git push&lt;/b&gt; → webhook. Developer never sees Tekton." style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="108" width="1200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_a_dev" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="700" y="150" as="sourcePoint"/>
+                        <mxPoint x="700" y="185" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_a_dev_l" value="build request (CR or API)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="155" width="160" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_operator" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="185" width="1200" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_l" value="&lt;b&gt;Builder Operator&lt;/b&gt;" style="text;html=1;fontSize=16;fontStyle=1;fontFamily=Red Hat Text;fontColor=#0066CC;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="193" width="300" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_d" value="Manages lifecycle: installs/updates namespace, Pipelines, Tasks, permissions, builder container images" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="218" width="600" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="248" width="220" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_s1_l" value="&lt;b&gt;1. Receive build request&lt;/b&gt;&lt;br&gt;via CR, API, or webhook" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="253" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_a1" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="350" y="273" as="sourcePoint"/>
+                        <mxPoint x="390" y="273" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_op_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="248" width="220" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_s2_l" value="&lt;b&gt;2. Select Pipeline template&lt;/b&gt;&lt;br&gt;based on strategy type" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="253" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_a2" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="610" y="273" as="sourcePoint"/>
+                        <mxPoint x="650" y="273" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_op_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="248" width="220" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_s3_l" value="&lt;b&gt;3. Create PipelineRun&lt;/b&gt;&lt;br&gt;in managed namespace" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="253" width="220" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_a3" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="870" y="273" as="sourcePoint"/>
+                        <mxPoint x="910" y="273" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_op_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="910" y="248" width="350" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_op_s4_l" value="&lt;b&gt;4. Monitor &amp; Enforce Compliance&lt;/b&gt;&lt;br&gt;Watch PipelineRun → SBOM → Sign → Publish → Update status" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="910" y="253" width="350" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_a_op_ns" value="" style="endArrow=block;html=1;strokeColor=#EE0000;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="700" y="315" as="sourcePoint"/>
+                        <mxPoint x="700" y="360" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_a_op_ns_l" value="&lt;b&gt;creates PipelineRun&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#EE0000;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="730" y="325" width="150" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_ns" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#707070;strokeWidth=2;dashed=1;dashPattern=8 8;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="360" width="1200" height="370" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_ns_l" value="&lt;b&gt;Managed Namespace&lt;/b&gt; (operator-controlled — developers have no access)" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="368" width="600" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_ns_lock" value="🔒 RBAC locked — no developer access. No parameter overrides." style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="393" width="400" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_pipes_l" value="&lt;b&gt;Tekton Pipelines (installed and updated by operator):&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="420" width="450" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_p1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="450" width="250" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_p1_l" value="&lt;b&gt;Pipeline: rhivos-build&lt;/b&gt;&lt;br&gt;Task: fetch → Task: bootc-build → Task: comply&lt;br&gt;Image: bootc base + Containerfile" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="455" width="250" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_p2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="450" width="250" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_p2_l" value="&lt;b&gt;Pipeline: mcu-build&lt;/b&gt;&lt;br&gt;Task: fetch → Task: pre-build → Task: build&lt;br&gt;→ Task: post-build → Task: comply" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="455" width="250" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_p3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="670" y="450" width="250" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_p3_l" value="&lt;b&gt;Pipeline: android-build&lt;/b&gt;&lt;br&gt;Task: fetch → Task: envsetup → Task: build&lt;br&gt;→ Task: extract → Task: comply" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="670" y="455" width="250" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_p4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="940" y="450" width="250" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_p4_l" value="&lt;b&gt;Pipeline: qnx-build&lt;/b&gt;&lt;br&gt;Task: fetch → Task: license → Task: build&lt;br&gt;→ Task: mkifs → Task: comply" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="940" y="455" width="250" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_run_l" value="&lt;b&gt;PipelineRun execution (MCU example):&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="535" width="350" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_t1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="565" width="180" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_t1_l" value="&lt;b&gt;TaskRun: fetch-src&lt;/b&gt;&lt;br&gt;Pod: alpine/git&lt;br&gt;git clone → workspace PVC" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="570" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_ta1" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="310" y="595" as="sourcePoint"/>
+                        <mxPoint x="340" y="595" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_t2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="565" width="180" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_t2_l" value="&lt;b&gt;TaskRun: pre-build&lt;/b&gt;&lt;br&gt;Pod: &lt;b&gt;gcc-arm:13&lt;/b&gt;&lt;br&gt;code gen, cmake configure" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="570" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_ta2" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="520" y="595" as="sourcePoint"/>
+                        <mxPoint x="550" y="595" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_t3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="550" y="565" width="180" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_t3_l" value="&lt;b&gt;TaskRun: build&lt;/b&gt;&lt;br&gt;Pod: &lt;b&gt;gcc-arm:13&lt;/b&gt;&lt;br&gt;cmake --build → .elf" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="550" y="570" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_ta3" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="730" y="595" as="sourcePoint"/>
+                        <mxPoint x="760" y="595" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_t4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="565" width="180" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_t4_l" value="&lt;b&gt;TaskRun: post-build&lt;/b&gt;&lt;br&gt;Pod: &lt;b&gt;gcc-arm:13&lt;/b&gt;&lt;br&gt;objcopy → .hex, .bin" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="570" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_ta4" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="940" y="595" as="sourcePoint"/>
+                        <mxPoint x="970" y="595" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_t5" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="970" y="565" width="180" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_t5_l" value="&lt;b&gt;TaskRun: comply&lt;/b&gt;&lt;br&gt;Pod: compliance tools&lt;br&gt;SBOM → Sign → Provenance" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="970" y="570" width="180" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_note" value="Tekton creates and manages all Pods. The operator does NOT create Pods directly." style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;fontStyle=2;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="640" width="500" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_a_reg" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="700" y="730" as="sourcePoint"/>
+                        <mxPoint x="700" y="770" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ob_registry" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#63993D;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="770" width="1000" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_registry_l" value="&lt;b&gt;OCI Registry&lt;/b&gt; (Quay / Artifactory) — Artifact + SBOM + Signature + Provenance" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="780" width="1000" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="840" width="60" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="865" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg1_l" value="Toolchain container (variable)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="864" width="200" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="310" y="865" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg2_l" value="Compliance (shared)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="864" width="140" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="510" y="865" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg3_l" value="Common infrastructure" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="864" width="140" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#707070;strokeWidth=2;dashed=1;dashPattern=8 8;" parent="1" vertex="1">
+                    <mxGeometry x="710" y="865" width="25" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="ob_leg4_l" value="Managed namespace (locked)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="740" y="864" width="200" height="18" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="option-b-hybrid" name="6 - Option B' Hybrid: CRD Outside, Tekton Inside">
+        <mxGraphModel dx="939" dy="787" grid="0" page="1" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="bh_title" value="Option B' Hybrid: AutomotiveBuild CRD Outside, Tekton Inside" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="800" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_subtitle" value="Developers interact with a purpose-built AutomotiveBuild CRD. The operator translates CRs into Tekton PipelineRuns internally." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="55" width="850" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_dev" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="95" width="1200" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_dev_l" value="&lt;b&gt;Developer / CI&lt;/b&gt; — &lt;b&gt;git push&lt;/b&gt; → webhook → CR created, or &lt;b&gt;oc apply -f automotivebuild.yaml&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="108" width="1200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_a_dev" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="350" y="150" as="sourcePoint"/>
+                        <mxPoint x="350" y="185" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="bh_a_dev_l" value="oc apply AutomotiveBuild" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="370" y="155" width="160" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_crd" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="185" width="550" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_crd_l" value="&lt;b&gt;AutomotiveBuild CRD&lt;/b&gt; — developer-facing API" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#0066CC;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="193" width="500" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_cr1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="230" width="240" height="32" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_cr1_l" value="zonal-controller-soc (image-builder)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="236" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_cr2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="230" width="240" height="32" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_cr2_l" value="body-controller-mcu (container-build)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="236" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_cr3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="268" width="240" height="32" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_cr3_l" value="ivi-android-aaos (android-soong)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="274" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_cr4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="268" width="240" height="32" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_cr4_l" value="qnx-cockpit (qnx-sdp)" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="380" y="274" width="240" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ocget" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="185" width="600" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ocget_l" value="&lt;b&gt;What the developer sees:&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="193" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ocget_d" value="$ oc get abuild&lt;br&gt;NAME                  STRATEGY         PHASE      STEP      AGE&lt;br&gt;zonal-controller-soc  image-builder    Succeeded            11m&lt;br&gt;body-controller-mcu   container-build  Building   compile   3m&lt;br&gt;ivi-android-aaos      android-soong    PreBuild   sync      1m&lt;br&gt;qnx-cockpit           qnx-sdp          Pending              5s" style="text;html=1;fontSize=8;fontFamily=Courier New;fontColor=#151515;align=left;spacing=5;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="220" width="560" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_a_crd_op" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="350" y="305" as="sourcePoint"/>
+                        <mxPoint x="350" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="bh_a_crd_op_l" value="watch" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="315" width="50" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_operator" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="350" width="1200" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_op_l" value="&lt;b&gt;Builder Operator — Translation Layer&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#0066CC;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="358" width="400" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_translate" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="395" width="540" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_tr_l" value="&lt;b&gt;CR → PipelineRun Translation&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="145" y="400" width="280" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_tr_map" value="strategy.type ─────────────► pipeline template selection&lt;br&gt;strategy.image ────────────► task step container image&lt;br&gt;strategy.steps.preBuild ───► task: pre-build steps&lt;br&gt;strategy.steps.build ──────► task: build steps&lt;br&gt;strategy.steps.postBuild ──► task: post-build steps&lt;br&gt;source.git ────────────────► pipeline param: repo URL&lt;br&gt;compliance ────────────────► task: comply (SBOM + sign)" style="text;html=1;fontSize=8;fontFamily=Courier New;fontColor=#151515;align=left;spacing=3;" parent="1" vertex="1">
+                    <mxGeometry x="145" y="423" width="500" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_sync" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="395" width="570" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_sync_l" value="&lt;b&gt;Status Sync&lt;/b&gt; (PipelineRun → AutomotiveBuild CR)" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="715" y="400" width="400" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_sync_map" value="PipelineRun.status.conditions ──► CR.status.phase&lt;br&gt;TaskRun name ───────────────────► CR.status.currentStep&lt;br&gt;PipelineRun.status.results ────► CR.status.artifact&lt;br&gt;TaskRun exit codes ─────────────► CR.status.stepResults&lt;br&gt;&lt;br&gt;Developer queries CR status. Never sees PipelineRun." style="text;html=1;fontSize=8;fontFamily=Courier New;fontColor=#151515;align=left;spacing=3;" parent="1" vertex="1">
+                    <mxGeometry x="715" y="423" width="530" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_a_op_ns" value="" style="endArrow=block;html=1;strokeColor=#EE0000;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="700" y="520" as="sourcePoint"/>
+                        <mxPoint x="700" y="565" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="bh_a_op_ns_l" value="&lt;b&gt;creates PipelineRun&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#EE0000;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="730" y="530" width="160" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ns" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#707070;strokeWidth=2;dashed=1;dashPattern=8 8;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="565" width="1200" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ns_l" value="&lt;b&gt;Managed Namespace&lt;/b&gt; (hidden from developers — Tekton executes here)" style="text;html=1;fontSize=12;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="573" width="550" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_t1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="610" width="180" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_t1_l" value="&lt;b&gt;TaskRun: fetch-src&lt;/b&gt;&lt;br&gt;Pod: alpine/git&lt;br&gt;git clone → workspace" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="615" width="180" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ta1" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="310" y="637" as="sourcePoint"/>
+                        <mxPoint x="340" y="637" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="bh_t2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="610" width="180" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_t2_l" value="&lt;b&gt;TaskRun: pre-build&lt;/b&gt;&lt;br&gt;Pod: &lt;b&gt;gcc-arm:13&lt;/b&gt;&lt;br&gt;code gen, cmake config" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="340" y="615" width="180" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ta2" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="520" y="637" as="sourcePoint"/>
+                        <mxPoint x="550" y="637" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="bh_t3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="550" y="610" width="180" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_t3_l" value="&lt;b&gt;TaskRun: build&lt;/b&gt;&lt;br&gt;Pod: &lt;b&gt;gcc-arm:13&lt;/b&gt;&lt;br&gt;cmake --build → .elf" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="550" y="615" width="180" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ta3" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="730" y="637" as="sourcePoint"/>
+                        <mxPoint x="760" y="637" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="bh_t4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="610" width="180" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_t4_l" value="&lt;b&gt;TaskRun: post-build&lt;/b&gt;&lt;br&gt;Pod: &lt;b&gt;gcc-arm:13&lt;/b&gt;&lt;br&gt;objcopy → .hex, .bin" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="760" y="615" width="180" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_ta4" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=1;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="940" y="637" as="sourcePoint"/>
+                        <mxPoint x="970" y="637" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="bh_t5" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="970" y="610" width="180" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_t5_l" value="&lt;b&gt;TaskRun: comply&lt;/b&gt;&lt;br&gt;Pod: compliance tools&lt;br&gt;SBOM → Sign → Provenance" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="970" y="615" width="180" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_invisible" value="Tekton is an &lt;b&gt;implementation detail&lt;/b&gt;. Developer sees AutomotiveBuild CR status, not PipelineRun status." style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;fontStyle=2;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="680" width="600" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_a_reg" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="700" y="745" as="sourcePoint"/>
+                        <mxPoint x="700" y="780" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="bh_registry" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#63993D;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="780" width="1000" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_registry_l" value="&lt;b&gt;OCI Registry&lt;/b&gt; (Quay / Artifactory) — Artifact + SBOM + Signature + Provenance" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="790" width="1000" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_key" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="845" width="1280" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="bh_key_l" value="&lt;b&gt;Key:&lt;/b&gt; Developer sees the &lt;b&gt;top layer&lt;/b&gt; (AutomotiveBuild CR). Operator manages the &lt;b&gt;middle layer&lt;/b&gt; (translation). Tekton runs the &lt;b&gt;bottom layer&lt;/b&gt; (Pods). Three layers, but only the top is visible." style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="70" y="853" width="1260" height="30" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="dev-perspective" name="7 - Developer Perspective: Inner &amp; Outer Loop">
+        <mxGraphModel dx="939" dy="787" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="dp_title" value="Developer Perspective: Inner Loop &amp; Outer Loop" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="20" width="700" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_subtitle" value="What the developer does vs. what happens under the hood. The implementation (Option A / B / B') is invisible." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="55" width="800" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_div" value="" style="line;strokeColor=#707070;strokeWidth=1;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="700" y="90" width="1" height="770" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_lh" value="&lt;b&gt;What the developer does&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="85" width="550" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_rh" value="&lt;b&gt;What happens under the hood&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="85" width="550" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_inner_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0066CC;strokeWidth=2;arcSize=8;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="120" width="1320" height="430" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_inner_label" value="&lt;b&gt;INNER LOOP&lt;/b&gt; — fast iteration, dozens of times per day (local, remote, or cluster compute)" style="text;html=1;fontSize=13;fontStyle=1;fontFamily=Red Hat Text;fontColor=#0066CC;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="128" width="700" height="22" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="170" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s1_l" value="&lt;b&gt;1. Edit code&lt;/b&gt;&lt;br&gt;~/firmware/body-ctrl/ — IDE, editor, whatever they prefer" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="178" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s1_r" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="170" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s1_r_l" value="&lt;i&gt;Nothing. Just files on disk.&lt;/i&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="190" width="560" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_a1" value="" style="endArrow=block;html=1;strokeColor=#0066CC;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="360" y="230" as="sourcePoint"/>
+                        <mxPoint x="360" y="260" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="dp_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="260" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_l" value="&lt;b&gt;2. Build&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot;&gt;$ caib build mcu [--on &lt;target&gt;]&lt;/font&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="268" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r_box" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0066CC;" vertex="1" parent="1">
+                    <mxGeometry x="750" y="250" width="560" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r_title" value="&lt;b&gt;Where does the build run?&lt;/b&gt; Same container, same steps — only the host changes:" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#0066CC;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="760" y="254" width="530" height="16" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" vertex="1" parent="1">
+                    <mxGeometry x="760" y="274" width="132" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r1_l" value="&lt;b&gt;Local Podman&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot; style=&quot;font-size:7px&quot;&gt;caib build mcu&lt;/font&gt;&lt;br&gt;podman on your machine" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" vertex="1" parent="1">
+                    <mxGeometry x="760" y="276" width="132" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#7B68EE;" vertex="1" parent="1">
+                    <mxGeometry x="896" y="274" width="132" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r2_l" value="&lt;b&gt;Dev Spaces&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot; style=&quot;font-size:7px&quot;&gt;caib build mcu&lt;/font&gt;&lt;br&gt;same cmd, cluster workspace" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" vertex="1" parent="1">
+                    <mxGeometry x="896" y="276" width="132" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" vertex="1" parent="1">
+                    <mxGeometry x="1032" y="274" width="132" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r3_l" value="&lt;b&gt;Remote Podman&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot; style=&quot;font-size:7px&quot;&gt;caib build --on farm&lt;/font&gt;&lt;br&gt;SSH to build machine" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" vertex="1" parent="1">
+                    <mxGeometry x="1032" y="276" width="132" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" vertex="1" parent="1">
+                    <mxGeometry x="1168" y="274" width="132" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s2_r4_l" value="&lt;b&gt;Cluster CR&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot; style=&quot;font-size:7px&quot;&gt;caib build --on cluster&lt;/font&gt;&lt;br&gt;creates CR, streams logs" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" vertex="1" parent="1">
+                    <mxGeometry x="1168" y="276" width="132" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_a2" value="" style="endArrow=block;html=1;strokeColor=#0066CC;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="360" y="320" as="sourcePoint"/>
+                        <mxPoint x="360" y="350" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="dp_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="350" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s3_l" value="&lt;b&gt;3. Flash&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot;&gt;$ jmp flash build/body-ctrl.hex&lt;/font&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="358" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s3_r" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="350" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s3_r_l" value="&lt;b&gt;Jumpstarter&lt;/b&gt; flashes the board on your bench (or virtual ECU)&lt;br&gt;dutlink / probe-rs / serial — same tool locally and on cluster" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="358" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_a3" value="" style="endArrow=block;html=1;strokeColor=#0066CC;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="360" y="410" as="sourcePoint"/>
+                        <mxPoint x="360" y="440" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="dp_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="440" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s4_l" value="&lt;b&gt;4. Test&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot;&gt;$ jmp test --suite regression&lt;/font&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="448" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s4_r" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F0FF;strokeColor=#0066CC;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="440" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s4_r_l" value="&lt;b&gt;Jumpstarter&lt;/b&gt; runs tests on the target&lt;br&gt;CAN bus validation, GPIO checks, timing tests — results stream to terminal" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="448" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_repeat" value="" style="endArrow=block;html=1;strokeColor=#0066CC;strokeWidth=2;rounded=1;endFill=1;dashed=1;dashPattern=5 5;curved=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="80" y="480" as="sourcePoint"/>
+                        <mxPoint x="80" y="180" as="targetPoint"/>
+                        <Array as="points">
+                            <mxPoint x="55" y="400"/>
+                            <mxPoint x="55" y="280"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="dp_repeat_l" value="&lt;b&gt;repeat&lt;/b&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#0066CC;align=center;rotation=-90;" parent="1" vertex="1">
+                    <mxGeometry x="15" y="330" width="60" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_outer_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#63993D;strokeWidth=2;arcSize=8;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="570" width="1320" height="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_outer_label" value="&lt;b&gt;OUTER LOOP&lt;/b&gt; — compliance build, triggered by git push, once per feature" style="text;html=1;fontSize=13;fontStyle=1;fontFamily=Red Hat Text;fontColor=#63993D;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="578" width="600" height="22" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s5" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="615" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s5_l" value="&lt;b&gt;5. Push&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot;&gt;$ git push origin fix/window-lifter-timing&lt;/font&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="623" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s5_r" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="615" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s5_r_l" value="&lt;b&gt;Webhook → AutomotiveBuild CR created automatically&lt;/b&gt;&lt;br&gt;Same container, same steps, same build — now on the cluster" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="623" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_a5" value="" style="endArrow=block;html=1;strokeColor=#63993D;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1030" y="675" as="sourcePoint"/>
+                        <mxPoint x="1030" y="700" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="dp_s6" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="700" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s6_l" value="&lt;b&gt;6. Wait&lt;/b&gt;&lt;br&gt;&lt;font face=&quot;Courier New&quot;&gt;$ oc get abuild body-controller-mcu&lt;br&gt;Phase: Building → Succeeded&lt;/font&gt;" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="705" width="560" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s6_r" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#707070;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="700" width="560" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s6_r_l" value="&lt;b&gt;Operator builds → SBOM → Sign → Provenance → Push to registry&lt;/b&gt;&lt;br&gt;Implementation: Option A (direct Pod) or B' (Tekton) — &lt;b&gt;developer doesn't know&lt;/b&gt;" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="708" width="560" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_a6" value="" style="endArrow=block;html=1;strokeColor=#63993D;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1030" y="760" as="sourcePoint"/>
+                        <mxPoint x="1030" y="785" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="dp_s7" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#63993D;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="785" width="560" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s7_l" value="&lt;b&gt;7. Done&lt;/b&gt; — signed artifact in registry, traceable to Git SHA" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="800" width="560" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s7_r" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#63993D;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="785" width="560" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_s7_r_l" value="&lt;b&gt;OCI Registry:&lt;/b&gt; artifact + SBOM + signature + SLSA provenance" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="800" width="560" height="25" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_tools" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="860" width="620" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_tools_l" value="&lt;b&gt;Developer tools:&lt;/b&gt; &lt;font face=&quot;Courier New&quot;&gt;caib&lt;/font&gt;, &lt;font face=&quot;Courier New&quot;&gt;jmp&lt;/font&gt;, &lt;font face=&quot;Courier New&quot;&gt;git&lt;/font&gt;. That's it." style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="864" width="620" height="22" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_infra" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
+                    <mxGeometry x="740" y="860" width="620" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="dp_infra_l" value="&lt;b&gt;Build targets:&lt;/b&gt; Local Podman · Dev Spaces · Remote Podman (build farm) · Cluster CR (Operator + CRD)" style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="740" y="864" width="620" height="22" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
