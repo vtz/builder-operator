@@ -1,0 +1,40 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: zephyr-hello-world-
+  namespace: hello-demo
+spec:
+  pipelineRef:
+    name: configurable-build-pipeline
+  timeouts:
+    pipeline: "30m"
+  params:
+    - name: containerImage
+      value: "ghcr.io/zephyrproject-rtos/ci-base:latest"
+    - name: fetchCommand
+      value: >-
+        west init --mr main fetched && cd fetched && west update --narrow -o=--depth=1
+    - name: prebuildCommand
+      value: >-
+        cd fetched && west list
+    - name: buildCommand
+      value: >-
+        cd fetched && ZEPHYR_TOOLCHAIN_VARIANT=host west build -p always -b native_sim/native/64 zephyr/samples/hello_world
+    - name: postbuildCommand
+      value: >-
+        cd fetched && timeout 5 ./build/zephyr/zephyr.exe || true
+    - name: deployCommand
+      value: >-
+        mkdir -p /host-build/deployment/zephyr-hello-world &&
+        cp fetched/build/zephyr/zephyr.exe /host-build/deployment/zephyr-hello-world/ &&
+        cp fetched/build/zephyr/zephyr.elf /host-build/deployment/zephyr-hello-world/ &&
+        cp fetched/build/zephyr/zephyr.map /host-build/deployment/zephyr-hello-world/ 2>/dev/null || true
+  workspaces:
+    - name: shared-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 5Gi

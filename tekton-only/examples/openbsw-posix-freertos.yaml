@@ -1,0 +1,45 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: openbsw-posix-freertos-
+  namespace: hello-demo
+spec:
+  pipelineRef:
+    name: configurable-build-pipeline
+  timeouts:
+    pipeline: "60m"
+  params:
+    - name: containerImage
+      value: "ubuntu:24.04"
+    - name: fetchCommand
+      value: >-
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends ca-certificates git cmake ninja-build g++ python3 &&
+        git clone --depth 1 https://github.com/eclipse-openbsw/openbsw.git fetched
+    - name: prebuildCommand
+      value: >-
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends cmake ninja-build g++ &&
+        cd fetched && cmake --preset posix-freertos
+    - name: buildCommand
+      value: >-
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends cmake ninja-build g++ &&
+        cd fetched && cmake --build --preset posix-freertos
+    - name: postbuildCommand
+      value: >-
+        find fetched/build/posix-freertos -name 'app.referenceApp.elf' -type f | head -5
+    - name: deployCommand
+      value: >-
+        mkdir -p /host-build/deployment/openbsw-posix-freertos &&
+        cp fetched/build/posix-freertos/executables/referenceApp/application/Release/app.referenceApp.elf
+        /host-build/deployment/openbsw-posix-freertos/ 2>/dev/null || true
+  workspaces:
+    - name: shared-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 5Gi
