@@ -1,0 +1,63 @@
+# =============================================================================
+# Trivy Configuration - Automotive Edge Security Scanning
+# Standards: ISO 21434 (vulnerability management), IEC 62443-4-1
+# =============================================================================
+
+# Severity levels to report
+severity:
+  - CRITICAL
+  - HIGH
+  - MEDIUM
+
+# Exit code 1 on findings (blocks pipeline in quality gate)
+exit-code: 1
+
+# Output format
+format: json
+
+# Do NOT ignore unfixed vulnerabilities
+# ISO 21434 Clause 8 requires documenting ALL known vulnerabilities
+ignore-unfixed: false
+
+# Vulnerability types to scan
+vuln-type:
+  - os          # OS package vulnerabilities (RPM, dpkg)
+  - library     # Language-specific library vulnerabilities
+
+# Security checks to perform
+security-checks:
+  - vuln        # Known vulnerabilities (CVE)
+  - config      # Misconfigurations (Dockerfile, K8s)
+  - secret      # Embedded secrets detection
+
+# Database configuration
+db:
+  # Skip database update in air-gapped environments
+  # skip-update: true
+  # Use local DB mirror for reproducibility
+  # repository: "ghcr.io/aquasecurity/trivy-db"
+
+# Cache settings
+cache:
+  dir: /tmp/trivy-cache
+
+# Ignore file for accepted risks (requires documented risk acceptance per ISO 21434)
+ignorefile: .trivyignore
+
+# License scanning (for supply chain compliance)
+license:
+  # Forbidden licenses in automotive context
+  forbidden:
+    - AGPL-1.0
+    - AGPL-3.0
+  # Restricted licenses requiring legal review
+  restricted:
+    - GPL-2.0
+    - GPL-3.0
+    - LGPL-2.1
+    - LGPL-3.0
+
+# Misconfiguration scanning
+misconfiguration:
+  # Dockerfile best practices
+  policy-bundle-repository: "ghcr.io/aquasecurity/trivy-policies"

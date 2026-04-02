@@ -1,0 +1,495 @@
+# =============================================================================
+# CI Pipeline - Build, Test, Security Scan, Quality Gate
+# Standards: ISO 21434, ISO 26262, IEC 62443, ASPICE
+# =============================================================================
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop, "release/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+  packages: write
+  id-token: write
+  pull-requests: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # Job 1: Build (Matrix - RHIVOS AArch64, RHIVOS x86_64, RTOS Cortex-M4)
+  # ===========================================================================
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [rhivos-aarch64, rhivos-x86_64, rtos-cortex-m4]
+        include:
+          - platform: rhivos-aarch64
+            cross_compile: aarch64-linux-gnu-
+            toolchain: build/toolchain/aarch64-rhivos.cmake
+            deploy_method: ostree
+            install_deps: gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          - platform: rhivos-x86_64
+            cross_compile: ""
+            toolchain: ""
+            deploy_method: ostree
+            install_deps: ""
+          - platform: rtos-cortex-m4
+            cross_compile: arm-none-eabi-
+            toolchain: build/toolchain/rtos-freertos.cmake
+            deploy_method: firmware-ota
+            install_deps: gcc-arm-none-eabi libnewlib-arm-none-eabi
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install cross-compilation toolchain
+        if: matrix.install_deps != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.install_deps }}
+
+      - name: Build application
+        run: |
+          make PLATFORM=${{ matrix.platform }} \
+               CROSS_COMPILE=${{ matrix.cross_compile }} \
+               all
+
+      - name: Run unit tests (ASPICE SWE.4)
+        if: matrix.platform != 'rtos-cortex-m4'
+        run: |
+          make PLATFORM=${{ matrix.platform }} test
+          echo "## Unit Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "Platform: ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "Status: PASSED" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate code coverage (ISO 26262 Part 6)
+        if: matrix.platform != 'rtos-cortex-m4'
+        run: |
+          make PLATFORM=${{ matrix.platform }} coverage
+          echo "## Code Coverage" >> $GITHUB_STEP_SUMMARY
+          lcov --summary coverage/coverage.info --rc lcov_branch_coverage=1 >> $GITHUB_STEP_SUMMARY 2>&1 || true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}
+          path: build/out/
+          retention-days: 30
+
+      - name: Upload test results
+        if: matrix.platform != 'rtos-cortex-m4'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.platform }}
+          path: |
+            build/out/test/
+            coverage/
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 2: SAST - CodeQL (ISO 26262 Part 6 / ISO 21434 Clause 10)
+  # ===========================================================================
+  sast-codeql:
+    name: SAST - CodeQL
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: cpp
+          config-file: security/codeql-config.yml
+
+      - name: Build for analysis
+        run: make PLATFORM=rhivos-x86_64 all
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:cpp"
+          output: codeql-results
+
+      - name: Upload CodeQL SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: codeql-results/
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 3: SAST - Semgrep (MISRA C / CERT C / Automotive Rules)
+  # ===========================================================================
+  sast-semgrep:
+    name: SAST - Semgrep (MISRA/CERT)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep with automotive rules
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: security/semgrep.yml
+          generateSarif: "1"
+
+      - name: Upload Semgrep SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          retention-days: 30
+
+      - name: Upload to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  # ===========================================================================
+  # Job 4: SBOM Generation (ISO 21434 Supply Chain / IEC 62443-4-1)
+  # ===========================================================================
+  sbom-generate:
+    name: SBOM Generation
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+          artifact-name: sbom-cyclonedx
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: sbom-spdx
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-artifacts
+          path: |
+            sbom.cyclonedx.json
+            sbom.spdx.json
+          retention-days: 90
+
+  # ===========================================================================
+  # Job 5: Vulnerability Scanning - Trivy (ISO 21434 / IEC 62443)
+  # ===========================================================================
+  vulnerability-scan:
+    name: Vulnerability Scan - Trivy
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "json"
+          output: "trivy-fs-report.json"
+          severity: "CRITICAL,HIGH,MEDIUM"
+          exit-code: "0"
+
+      - name: Run Trivy SARIF for GitHub Code Scanning
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      - name: Upload Trivy SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      - name: Upload Trivy JSON report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-fs-report.json
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 6: OSV Scanner (Open Source Vulnerability Database)
+  # ===========================================================================
+  osv-scan:
+    name: OSV Scanner
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run OSV Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@v1
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --recursive
+            --format=json
+            --output=osv-results.json
+            ./
+
+      - name: Upload OSV results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: osv-results
+          path: osv-results.json
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 7: Secrets Detection - TruffleHog (IEC 62443 FR4)
+  # ===========================================================================
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog
+        run: |
+          docker run --rm -v "$PWD:/pwd" \
+            trufflesecurity/trufflehog:latest \
+            filesystem /pwd \
+            --json \
+            --fail \
+            > trufflehog-results.json 2>&1 || true
+
+      - name: Upload secrets scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trufflehog-results
+          path: trufflehog-results.json
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 8: License Compliance - ScanCode (Supply Chain)
+  # ===========================================================================
+  license-scan:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ScanCode
+        run: |
+          pip install scancode-toolkit
+          scancode --license --copyright --json-pp license-report.json \
+            --processes 4 \
+            --ignore "build/*" --ignore "test/*" --ignore ".git/*" \
+            . || true
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: license-report.json
+          retention-days: 30
+
+  # ===========================================================================
+  # Job 9: Quality Gate (Aggregates all results, enforces pass/fail)
+  # ===========================================================================
+  quality-gate:
+    name: Quality Gate
+    needs:
+      - build
+      - sast-codeql
+      - sast-semgrep
+      - sbom-generate
+      - vulnerability-scan
+      - osv-scan
+      - secrets-scan
+      - license-scan
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Evaluate quality gate
+        id: gate
+        run: |
+          GATE_PASS=true
+          SUMMARY=""
+
+          # --- Check Trivy results (CRITICAL/HIGH = blocking) ---
+          if [ -f artifacts/trivy-report/trivy-fs-report.json ]; then
+            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' artifacts/trivy-report/trivy-fs-report.json 2>/dev/null || echo 0)
+            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' artifacts/trivy-report/trivy-fs-report.json 2>/dev/null || echo 0)
+            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' artifacts/trivy-report/trivy-fs-report.json 2>/dev/null || echo 0)
+
+            SUMMARY="${SUMMARY}### Vulnerability Scan (Trivy)\n"
+            SUMMARY="${SUMMARY}| Severity | Count | Gate |\n|---|---|---|\n"
+            SUMMARY="${SUMMARY}| CRITICAL | ${CRITICAL} | BLOCKING |\n"
+            SUMMARY="${SUMMARY}| HIGH | ${HIGH} | BLOCKING |\n"
+            SUMMARY="${SUMMARY}| MEDIUM | ${MEDIUM} | Advisory |\n\n"
+
+            if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+              GATE_PASS=false
+              echo "::error::Quality gate FAILED: ${CRITICAL} CRITICAL, ${HIGH} HIGH vulnerabilities found"
+            fi
+          fi
+
+          # --- Check TruffleHog results (any secret = blocking) ---
+          if [ -f artifacts/trufflehog-results/trufflehog-results.json ]; then
+            SECRETS=$(wc -l < artifacts/trufflehog-results/trufflehog-results.json || echo 0)
+            SUMMARY="${SUMMARY}### Secrets Detection (TruffleHog)\n"
+            SUMMARY="${SUMMARY}Secrets found: ${SECRETS}\n\n"
+            if [ "$SECRETS" -gt 0 ]; then
+              GATE_PASS=false
+              echo "::error::Quality gate FAILED: ${SECRETS} secrets detected"
+            fi
+          fi
+
+          # --- Check build status (all platforms must pass) ---
+          SUMMARY="${SUMMARY}### Build Status\n"
+          SUMMARY="${SUMMARY}All platform builds: ${{ needs.build.result }}\n\n"
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            GATE_PASS=false
+            echo "::error::Quality gate FAILED: Build failed on one or more platforms"
+          fi
+
+          # --- Check SBOM generation ---
+          if [ ! -f artifacts/sbom-artifacts/sbom.cyclonedx.json ]; then
+            GATE_PASS=false
+            echo "::error::Quality gate FAILED: SBOM generation failed"
+            SUMMARY="${SUMMARY}### SBOM Generation\nStatus: FAILED (no SBOM produced)\n\n"
+          else
+            SUMMARY="${SUMMARY}### SBOM Generation\nStatus: PASSED\n\n"
+          fi
+
+          # --- Summary ---
+          SUMMARY="${SUMMARY}---\n### Overall Quality Gate\n"
+          if [ "$GATE_PASS" = true ]; then
+            SUMMARY="${SUMMARY}**PASSED** - All blocking criteria met\n"
+            echo "gate_result=pass" >> $GITHUB_OUTPUT
+          else
+            SUMMARY="${SUMMARY}**FAILED** - One or more blocking criteria not met\n"
+            echo "gate_result=fail" >> $GITHUB_OUTPUT
+          fi
+
+          echo -e "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ steps.gate.outputs.gate_result }}';
+            const icon = result === 'pass' ? ':white_check_mark:' : ':x:';
+            const body = `## ${icon} Quality Gate: ${result.toUpperCase()}
+
+            | Check | Status |
+            |---|---|
+            | Build (all platforms) | ${{ needs.build.result }} |
+            | SAST - CodeQL | ${{ needs.sast-codeql.result }} |
+            | SAST - Semgrep | ${{ needs.sast-semgrep.result }} |
+            | SBOM Generation | ${{ needs.sbom-generate.result }} |
+            | Vulnerability Scan | ${{ needs.vulnerability-scan.result }} |
+            | OSV Scanner | ${{ needs.osv-scan.result }} |
+            | Secrets Detection | ${{ needs.secrets-scan.result }} |
+            | License Compliance | ${{ needs.license-scan.result }} |
+
+            _Standards: ISO 21434, ISO 26262, IEC 62443, ASPICE_`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Fail if quality gate failed
+        if: steps.gate.outputs.gate_result == 'fail'
+        run: exit 1
+
+  # ===========================================================================
+  # Job 10: Compliance Snapshot (Archive scan artifacts for audit trail)
+  # ===========================================================================
+  compliance-snapshot:
+    name: Compliance Snapshot
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && needs.quality-gate.result == 'success'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: compliance-bundle/
+
+      - name: Generate compliance summary
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          cat > compliance-bundle/compliance-summary.json << EOF
+          {
+            "timestamp": "${TIMESTAMP}",
+            "git_sha": "${{ github.sha }}",
+            "git_ref": "${{ github.ref }}",
+            "run_id": "${{ github.run_id }}",
+            "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "standards": ["ISO 21434", "ISO 26262", "IEC 62443", "ASPICE"],
+            "quality_gate": "PASSED",
+            "artifacts": {
+              "sbom_cyclonedx": "sbom-artifacts/sbom.cyclonedx.json",
+              "sbom_spdx": "sbom-artifacts/sbom.spdx.json",
+              "trivy_report": "trivy-report/trivy-fs-report.json",
+              "codeql_sarif": "codeql-sarif/",
+              "semgrep_sarif": "semgrep-sarif/semgrep.sarif",
+              "osv_results": "osv-results/osv-results.json",
+              "secrets_scan": "trufflehog-results/trufflehog-results.json",
+              "license_report": "license-report/license-report.json"
+            }
+          }
+          EOF
+
+      - name: Upload compliance bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-bundle-${{ github.sha }}
+          path: compliance-bundle/
+          retention-days: 365

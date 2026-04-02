@@ -1,0 +1,206 @@
+# =============================================================================
+# Automotive Image Builder (AIB) Manifest - RHIVOS Edge Device
+# Format: .aib.yml (simplified AIB manifest)
+# Docs: https://sigs.centos.org/automotive/building/building_an_os_image/
+# =============================================================================
+
+# Image metadata
+name: rhivos-edge-device
+description: "RHIVOS edge computing image with safety and security hardening"
+version: "0.1.0"
+
+# Target image configuration
+image:
+  type: ostree          # OSTree-based immutable deployment
+  arch: aarch64         # Target architecture (aarch64 or x86_64)
+  ref: rhivos/edge/aarch64/production
+
+# Base distribution
+distro:
+  name: centos-stream
+  version: 10
+
+# RPM repositories
+repos:
+  - id: baseos
+    name: "CentOS Stream 10 - BaseOS"
+    baseurl: "https://mirror.stream.centos.org/10-stream/BaseOS/$basearch/os/"
+    gpgcheck: true
+
+  - id: appstream
+    name: "CentOS Stream 10 - AppStream"
+    baseurl: "https://mirror.stream.centos.org/10-stream/AppStream/$basearch/os/"
+    gpgcheck: true
+
+  - id: automotive
+    name: "CentOS Automotive SIG"
+    baseurl: "https://mirror.stream.centos.org/SIGs/10-stream/automotive/$basearch/"
+    gpgcheck: true
+
+# Package selection
+packages:
+  # Core system
+  - systemd
+  - selinux-policy-targeted
+  - policycoreutils
+  - audit
+  - chrony
+
+  # Container runtime (for mixed-criticality workloads)
+  - podman
+  - skopeo
+  - buildah
+
+  # Automotive / CAN bus
+  - can-utils
+  - libsocketcan
+  - iproute
+
+  # Bluetooth (vehicle peripherals)
+  - bluez
+
+  # Security tooling
+  - openssl
+  - tpm2-tools
+  - clevis
+  - tang
+
+  # Monitoring
+  - systemd-journal-remote
+
+  # Edge application (custom RPM - placeholder)
+  # - edge-app
+
+# System customizations
+customizations:
+  # Hostname
+  hostname: rhivos-edge-001
+
+  # Timezone
+  timezone: UTC
+
+  # Kernel configuration
+  kernel:
+    # Security and safety kernel parameters
+    append: >-
+      security=selinux
+      selinux=1
+      enforcing=1
+      audit=1
+      slub_debug=FZP
+      page_poison=1
+      vsyscall=none
+      lockdown=confidentiality
+      random.trust_cpu=off
+      iommu=force
+      panic=30
+
+  # Firewall - deny all by default (IEC 62443 FR5: Restricted Data Flow)
+  firewall:
+    enabled: true
+    default_zone: drop
+    ports: []
+    services: []
+    # Open only what is explicitly required:
+    # ports:
+    #   - "8443/tcp"  # Edge management API (mTLS only)
+
+  # Services
+  services:
+    enabled:
+      - edge-app.service       # Main edge application
+      - podman.socket          # Container runtime socket activation
+      - auditd.service         # Security audit logging
+      - chronyd.service        # Time synchronization
+      - systemd-journal-remote.service
+    disabled:
+      - sshd.service           # Disabled in production (IEC 62443 least privilege)
+      - bluetooth.service      # Enable only when needed
+      - avahi-daemon.service   # mDNS not needed in production
+
+  # No default users (IEC 62443 FR1: Identification and Authentication)
+  # Users provisioned via fleet management during initial enrollment
+  users: []
+
+  # Filesystem customizations
+  filesystem:
+    # Read-only root filesystem (OSTree default)
+    # Writable directories managed via /var and tmpfs
+    directories:
+      - path: /var/lib/edge-app
+        mode: "0750"
+        user: edge-app
+        group: edge-app
+      - path: /var/log/edge-app
+        mode: "0750"
+        user: edge-app
+        group: edge-app
+
+  # Systemd unit for edge application
+  files:
+    - path: /etc/systemd/system/edge-app.service
+      content: |
+        [Unit]
+        Description=Edge Application Service
+        After=network-online.target
+        Wants=network-online.target
+        StartLimitIntervalSec=60
+        StartLimitBurst=3
+
+        [Service]
+        Type=notify
+        ExecStart=/usr/bin/edge-app --config /etc/edge-app/config.yml
+        Restart=on-failure
+        RestartSec=5
+        WatchdogSec=30
+        User=edge-app
+        Group=edge-app
+
+        # Security hardening (ISO 26262 freedom from interference)
+        NoNewPrivileges=yes
+        ProtectSystem=strict
+        ProtectHome=yes
+        PrivateTmp=yes
+        PrivateDevices=yes
+        ProtectKernelTunables=yes
+        ProtectKernelModules=yes
+        ProtectControlGroups=yes
+        RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_CAN
+        RestrictNamespaces=yes
+        RestrictRealtime=no
+        MemoryDenyWriteExecute=yes
+        LockPersonality=yes
+        ReadWritePaths=/var/lib/edge-app /var/log/edge-app
+
+        # Resource limits (ISO 26262 resource availability)
+        MemoryMax=256M
+        CPUQuota=80%
+
+        [Install]
+        WantedBy=multi-user.target
+
+# Image signing configuration (ISO 21434 supply chain integrity)
+signing:
+  # Secure boot signing with pesign
+  method: pesign
+  # Key paths configured at build time via environment variables:
+  # SIGNING_KEY=/path/to/secure-boot.key
+  # SIGNING_CERT=/path/to/secure-boot.crt
+  description: "OSTree commits signed for secure boot chain verification"
+
+# OSTree configuration
+ostree:
+  # Remote repository for OTA updates
+  remote:
+    name: production
+    url: "https://ostree.example.com/repo"
+    gpg_verify: true
+    tls_client_cert: /etc/pki/edge/client.crt
+    tls_client_key: /etc/pki/edge/client.key
+
+  # Update policy
+  update:
+    automatic: false          # Updates triggered by fleet management
+    rollback_on_failure: true # Automatic rollback if health check fails
+    health_check_cmd: "/usr/bin/edge-app --health-check"
+    health_check_timeout: 60

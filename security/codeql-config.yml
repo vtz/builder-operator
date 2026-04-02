@@ -1,0 +1,39 @@
+# =============================================================================
+# CodeQL Configuration - RHIVOS Edge Security Analysis
+# Standards: ISO 21434 Clause 10, ISO 26262 Part 6, IEC 62443-4-1
+# =============================================================================
+
+name: "RHIVOS Edge Security Analysis"
+
+# Query suites to run
+queries:
+  - uses: security-extended     # Broader security queries
+  - uses: security-and-quality  # Security + code quality
+
+# Paths to exclude from analysis
+paths-ignore:
+  - third_party/
+  - vendor/
+  - test/
+  - fuzz/
+  - build/out/
+  - "**/*_test.c"
+  - "**/*_test.cpp"
+  - "**/mock_*.c"
+
+# Paths to include (if you want to restrict analysis scope)
+# paths:
+#   - src/
+#   - lib/
+
+# Query filters - focus on security-relevant findings
+query-filters:
+  - include:
+      tags contain: security
+  - include:
+      tags contain: correctness
+  - include:
+      tags contain: reliability
+  - exclude:
+      tags contain: maintainability
+      precision: low

@@ -1,0 +1,299 @@
+# =============================================================================
+# Semgrep Custom Rules - Automotive Safety & Security
+# Standards: MISRA C:2012, CERT C, ISO 26262 Part 6, ISO 21434 Clause 10
+# =============================================================================
+rules:
+
+  # ---------------------------------------------------------------------------
+  # MISRA C:2012 / Memory Safety
+  # ---------------------------------------------------------------------------
+
+  - id: automotive-unsafe-string-functions
+    patterns:
+      - pattern-either:
+          - pattern: strcpy(...)
+          - pattern: strcat(...)
+          - pattern: sprintf(...)
+          - pattern: gets(...)
+          - pattern: vsprintf(...)
+    message: >
+      Unsafe string function detected. Use bounded alternatives (strncpy, strncat,
+      snprintf). Violates MISRA C:2012 Rule 21.17 and CERT C STR31-C.
+    languages: [c, cpp]
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: memory-safety
+      technology: [c]
+      confidence: HIGH
+      cwe: "CWE-120: Buffer Copy without Checking Size of Input"
+      misra: "Rule 21.17"
+      cert: "STR31-C"
+      iso26262: "Part 6, Table 1"
+      iso21434: "Clause 10, RQ-10-05"
+
+  - id: automotive-unsafe-memory-functions
+    patterns:
+      - pattern-either:
+          - pattern: memcpy($DST, $SRC, $SIZE)
+          - pattern: memmove($DST, $SRC, $SIZE)
+    pattern-not-inside: |
+      if ($SIZE <= sizeof($DST)) { ... }
+    message: >
+      Memory copy without explicit bounds validation. Ensure size parameter
+      does not exceed destination buffer. CERT C MEM35-C.
+    languages: [c]
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: memory-safety
+      confidence: MEDIUM
+      cwe: "CWE-120: Buffer Copy without Checking Size of Input"
+      cert: "MEM35-C"
+
+  - id: automotive-format-string
+    patterns:
+      - pattern: printf($FMT, ...)
+      - metavariable-pattern:
+          metavariable: $FMT
+          pattern-not: "..."
+    message: >
+      Non-literal format string detected. This may lead to format string
+      vulnerabilities. Use a string literal format. CERT C FIO30-C.
+    languages: [c]
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: injection
+      confidence: HIGH
+      cwe: "CWE-134: Use of Externally-Controlled Format String"
+      cert: "FIO30-C"
+      misra: "Rule 21.6"
+
+  - id: automotive-null-pointer-deref
+    pattern: |
+      $PTR = $FUNC(...);
+      ...
+      *$PTR;
+    pattern-not: |
+      $PTR = $FUNC(...);
+      ...
+      if ($PTR != NULL) { ... *$PTR; ... }
+    message: >
+      Potential null pointer dereference. Return value must be checked
+      before use. MISRA C:2012 Rule 1.3, CERT C EXP34-C.
+    languages: [c]
+    severity: ERROR
+    metadata:
+      category: correctness
+      subcategory: null-pointer
+      confidence: MEDIUM
+      cwe: "CWE-476: NULL Pointer Dereference"
+      misra: "Rule 1.3"
+      cert: "EXP34-C"
+      iso26262: "Part 6, Table 1"
+
+  # ---------------------------------------------------------------------------
+  # Integer Safety
+  # ---------------------------------------------------------------------------
+
+  - id: automotive-integer-overflow
+    patterns:
+      - pattern: (int)$X * (int)$Y
+      - pattern: $X + $Y
+    pattern-inside: |
+      int $RESULT = ...;
+    message: >
+      Potential integer overflow in arithmetic operation. Use safe integer
+      arithmetic or pre-condition checks. CERT C INT32-C.
+    languages: [c]
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: integer-overflow
+      confidence: LOW
+      cwe: "CWE-190: Integer Overflow or Wraparound"
+      cert: "INT32-C"
+      misra: "Rule 12.1"
+
+  - id: automotive-implicit-sign-conversion
+    pattern: |
+      unsigned $TYPE $VAR = $SIGNED_VAL;
+    message: >
+      Implicit sign conversion detected. This may cause unexpected behavior
+      with negative values. MISRA C:2012 Rule 10.3.
+    languages: [c]
+    severity: WARNING
+    metadata:
+      category: correctness
+      confidence: MEDIUM
+      cwe: "CWE-195: Signed to Unsigned Conversion Error"
+      misra: "Rule 10.3"
+
+  # ---------------------------------------------------------------------------
+  # Automotive / CAN Bus Safety
+  # ---------------------------------------------------------------------------
+
+  - id: automotive-can-no-validation
+    pattern: |
+      read($FD, &$FRAME, sizeof(struct can_frame));
+      ...
+      $FRAME.data[$IDX]
+    pattern-not: |
+      read($FD, &$FRAME, sizeof(struct can_frame));
+      ...
+      if ($FRAME.can_id == ...) { ... $FRAME.data[$IDX] ... }
+    message: >
+      CAN frame data accessed without validating CAN ID. All incoming CAN
+      messages must be validated against expected message IDs before processing.
+      ISO 21434 requires input validation for all external interfaces.
+    languages: [c]
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: input-validation
+      confidence: MEDIUM
+      cwe: "CWE-20: Improper Input Validation"
+      iso21434: "Clause 10, RQ-10-05"
+
+  - id: automotive-can-dlc-unchecked
+    pattern: |
+      struct can_frame $FRAME;
+      ...
+      $FRAME.data[$IDX]
+    pattern-not: |
+      struct can_frame $FRAME;
+      ...
+      if ($IDX < $FRAME.can_dlc) { ... $FRAME.data[$IDX] ... }
+    message: >
+      CAN frame data accessed without checking DLC (Data Length Code).
+      Access beyond DLC may read uninitialized memory.
+    languages: [c]
+    severity: ERROR
+    metadata:
+      category: correctness
+      subcategory: bounds-check
+      confidence: MEDIUM
+      cwe: "CWE-125: Out-of-bounds Read"
+      iso26262: "Part 6, Table 1"
+
+  # ---------------------------------------------------------------------------
+  # Cryptographic Safety
+  # ---------------------------------------------------------------------------
+
+  - id: automotive-hardcoded-key
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $TYPE $KEY[] = "...";
+          - pattern: |
+              #define $KEY "..."
+          - pattern: |
+              const char *$KEY = "...";
+    pattern-inside: |
+      $TYPE $KEY = ...;
+    metavariable-regex:
+      metavariable: $KEY
+      regex: ".*(key|KEY|secret|SECRET|password|PASSWORD|token|TOKEN|cert|CERT).*"
+    message: >
+      Potential hardcoded cryptographic key or secret. Keys must be provisioned
+      via secure key storage (TPM, HSM). ISO 21434 Clause 10 / IEC 62443 FR4.
+    languages: [c, cpp]
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: secrets
+      confidence: HIGH
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      iso21434: "Clause 10"
+      iec62443: "FR4 - Data Confidentiality"
+
+  - id: automotive-weak-crypto
+    patterns:
+      - pattern-either:
+          - pattern: MD5(...)
+          - pattern: SHA1(...)
+          - pattern: DES_ecb_encrypt(...)
+          - pattern: EVP_des_ecb()
+          - pattern: EVP_md5()
+          - pattern: EVP_sha1()
+    message: >
+      Weak cryptographic algorithm detected. Use SHA-256+ for hashing and
+      AES-256 for encryption. IEC 62443 FR4 / ISO 21434 Clause 10.
+    languages: [c, cpp]
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: cryptography
+      confidence: HIGH
+      cwe: "CWE-327: Use of Broken or Risky Cryptographic Algorithm"
+      iec62443: "FR4 - Data Confidentiality"
+
+  # ---------------------------------------------------------------------------
+  # Error Handling / Safety
+  # ---------------------------------------------------------------------------
+
+  - id: automotive-unchecked-return
+    patterns:
+      - pattern: |
+          $FUNC(...);
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: "(malloc|calloc|realloc|fopen|open|read|write|send|recv|connect)"
+    message: >
+      Return value of critical function not checked. All system calls and
+      memory allocations must have return value validation. CERT C ERR33-C.
+    languages: [c]
+    severity: ERROR
+    metadata:
+      category: correctness
+      subcategory: error-handling
+      confidence: HIGH
+      cwe: "CWE-252: Unchecked Return Value"
+      cert: "ERR33-C"
+      misra: "Rule 17.7"
+      iso26262: "Part 6, Table 1"
+
+  - id: automotive-missing-default-switch
+    pattern: |
+      switch ($EXPR) {
+        case $A: ...
+      }
+    pattern-not: |
+      switch ($EXPR) {
+        ...
+        default: ...
+      }
+    message: >
+      Switch statement missing default case. All switch statements must have
+      a default handler. MISRA C:2012 Rule 16.4.
+    languages: [c]
+    severity: WARNING
+    metadata:
+      category: correctness
+      confidence: HIGH
+      misra: "Rule 16.4"
+      iso26262: "Part 6, Table 1"
+
+  # ---------------------------------------------------------------------------
+  # Concurrency Safety
+  # ---------------------------------------------------------------------------
+
+  - id: automotive-signal-in-handler
+    pattern: |
+      void $HANDLER(int $SIG) {
+        ...
+        printf(...);
+        ...
+      }
+    message: >
+      Async-signal-unsafe function called in signal handler. Only
+      async-signal-safe functions may be used. CERT C SIG30-C.
+    languages: [c]
+    severity: ERROR
+    metadata:
+      category: correctness
+      subcategory: concurrency
+      confidence: HIGH
+      cwe: "CWE-479: Signal Handler Use of Non-Reentrant Function"
+      cert: "SIG30-C"

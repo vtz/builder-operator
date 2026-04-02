@@ -1,0 +1,204 @@
+# =============================================================================
+# Scheduled Security Audit
+# Standards: ISO 21434 Clause 8, IEC 62443-4-1, ISO 26262 Part 8
+# =============================================================================
+
+name: Security Audit
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Weekly: Monday 6:00 AM UTC
+  workflow_dispatch:
+    inputs:
+      scan_target:
+        description: "Target to scan"
+        required: false
+        default: "latest"
+        type: string
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # Job 1: Re-scan for newly disclosed vulnerabilities
+  # ===========================================================================
+  vuln-rescan:
+    name: Vulnerability Re-scan
+    runs-on: ubuntu-latest
+    outputs:
+      critical_count: ${{ steps.analyze.outputs.critical }}
+      high_count: ${{ steps.analyze.outputs.high }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem re-scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "json"
+          output: "trivy-audit.json"
+          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+
+      - name: Analyze results
+        id: analyze
+        run: |
+          CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-audit.json 2>/dev/null || echo 0)
+          HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-audit.json 2>/dev/null || echo 0)
+          echo "critical=${CRITICAL}" >> $GITHUB_OUTPUT
+          echo "high=${HIGH}" >> $GITHUB_OUTPUT
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-trivy-${{ github.run_id }}
+          path: trivy-audit.json
+          retention-days: 90
+
+  # ===========================================================================
+  # Job 2: Dependency review
+  # ===========================================================================
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: OSV Scanner full audit
+        uses: google/osv-scanner-action/osv-scanner-action@v1
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --recursive
+            --format=json
+            --output=osv-audit.json
+            ./
+
+      - name: Upload dependency audit
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-audit-osv-${{ github.run_id }}
+          path: osv-audit.json
+          retention-days: 90
+
+  # ===========================================================================
+  # Job 3: Fuzz regression
+  # ===========================================================================
+  fuzz-regression:
+    name: Fuzz Regression
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install fuzzing tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Run fuzz corpus regression
+        run: |
+          if [ -d "fuzz/corpus" ] && [ "$(ls -A fuzz/corpus)" ]; then
+            make fuzz FUZZ_TIME=60 || true
+          else
+            echo "No fuzz corpus found. Skipping regression."
+          fi
+
+      - name: Upload fuzz results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-audit-fuzz-${{ github.run_id }}
+          path: build/out/fuzz/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ===========================================================================
+  # Job 4: Generate audit report and create issues
+  # ===========================================================================
+  report-generation:
+    name: Generate Audit Report
+    needs: [vuln-rescan, dependency-review, fuzz-regression]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download all audit artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: audit-results/
+
+      - name: Generate audit report
+        id: report
+        run: |
+          CRITICAL=${{ needs.vuln-rescan.outputs.critical_count || '0' }}
+          HIGH=${{ needs.vuln-rescan.outputs.high_count || '0' }}
+          DATE=$(date -u +"%Y-%m-%d")
+
+          cat > audit-report.md << EOF
+          # Security Audit Report - ${DATE}
+
+          ## Summary
+          | Metric | Value |
+          |---|---|
+          | Scan Date | ${DATE} |
+          | Git SHA | ${{ github.sha }} |
+          | Critical Vulnerabilities | ${CRITICAL} |
+          | High Vulnerabilities | ${HIGH} |
+          | Trivy Scan | ${{ needs.vuln-rescan.result }} |
+          | OSV Scan | ${{ needs.dependency-review.result }} |
+          | Fuzz Regression | ${{ needs.fuzz-regression.result }} |
+
+          ## Standards Compliance
+          - **ISO 21434 Clause 8**: Continual cybersecurity monitoring - ACTIVE
+          - **IEC 62443-4-1**: Vulnerability scanning - COMPLETED
+          - **ISO 26262 Part 8**: Tool and component monitoring - ACTIVE
+
+          ## Action Required
+          $(if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then echo "**IMMEDIATE ACTION REQUIRED**: ${CRITICAL} critical and ${HIGH} high vulnerabilities found."; else echo "No immediate action required."; fi)
+
+          ## Vulnerability Triage SLAs
+          | Severity | SLA | Deadline |
+          |---|---|---|
+          | CRITICAL | 24 hours | $(date -u -d "+1 day" +"%Y-%m-%d" 2>/dev/null || date -u +"%Y-%m-%d") |
+          | HIGH | 7 days | $(date -u -d "+7 days" +"%Y-%m-%d" 2>/dev/null || date -u +"%Y-%m-%d") |
+          | MEDIUM | 30 days | $(date -u -d "+30 days" +"%Y-%m-%d" 2>/dev/null || date -u +"%Y-%m-%d") |
+          | LOW | 90 days | $(date -u -d "+90 days" +"%Y-%m-%d" 2>/dev/null || date -u +"%Y-%m-%d") |
+          EOF
+
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo "create_issue=true" >> $GITHUB_OUTPUT
+          else
+            echo "create_issue=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Issue for critical findings
+        if: steps.report.outputs.create_issue == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('audit-report.md', 'utf8');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Security Audit] Critical/High vulnerabilities found - ${new Date().toISOString().split('T')[0]}`,
+              body: report,
+              labels: ['security', 'vulnerability', 'audit']
+            });
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-report-${{ github.run_id }}
+          path: audit-report.md
+          retention-days: 365

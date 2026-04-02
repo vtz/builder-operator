@@ -1,0 +1,93 @@
+# =============================================================================
+# Cosign Signing Policy - Supply Chain Integrity
+# Standards: ISO 21434 (supply chain), IEC 62443 FR3 (system integrity),
+#            ISO 26262 Part 8 (configuration management)
+# =============================================================================
+
+# --- Signing Method ---
+signing:
+  method: keyless
+  description: >
+    Keyless signing via Sigstore Fulcio, using GitHub Actions OIDC identity.
+    Signatures are recorded in the Rekor transparency log for auditability.
+
+  # OIDC identity binding
+  oidc:
+    issuer: "https://token.actions.githubusercontent.com"
+    # Only accept signatures from this repository's CI/CD workflows
+    identity_regexp: "https://github.com/<ORG>/<REPO>/.github/workflows/(ci|cd)\\.yml@refs/heads/(main|release/.*)$"
+    # Subject alternative name pattern
+    san_regexp: "https://github.com/<ORG>/<REPO>/.*"
+
+  # Transparency log
+  transparency_log:
+    url: "https://rekor.sigstore.dev"
+    required: true
+
+# --- Verification Policy ---
+verification:
+  # Container image verification (RHIVOS)
+  container_images:
+    command: >
+      cosign verify
+      --certificate-identity-regexp "https://github.com/<ORG>/<REPO>/.github/workflows/cd.yml@refs/heads/main"
+      --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+      ${REGISTRY}/${IMAGE}@${DIGEST}
+
+  # OSTree commit verification
+  ostree_commits:
+    method: gpg
+    description: "OSTree commits signed with GPG key for device-side verification"
+    keyring: "/etc/pki/rpm-gpg/RPM-GPG-KEY-edge-app"
+    command: >
+      ostree --repo=/ostree/repo gpg-verify ${REF} --keyring=/etc/pki/rpm-gpg/RPM-GPG-KEY-edge-app
+
+  # RTOS firmware verification
+  firmware:
+    method: kms
+    description: "Firmware binaries signed via cloud KMS, verified by bootloader"
+    kms_provider: "awskms:///arn:aws:kms:REGION:ACCOUNT:key/KEY-ID"
+    command: >
+      cosign verify-blob
+      --key awskms:///arn:aws:kms:REGION:ACCOUNT:key/KEY-ID
+      --signature firmware.sig
+      firmware.bin
+
+# --- SLSA Provenance ---
+provenance:
+  level: 3
+  generator: "slsa-framework/slsa-github-generator"
+  verification_command: >
+    slsa-verifier verify-image ${REGISTRY}/${IMAGE}@${DIGEST}
+    --source-uri github.com/<ORG>/<REPO>
+    --source-tag ${VERSION}
+
+# --- Key Rotation Policy ---
+key_management:
+  rotation:
+    container_signing: "Automatic (keyless - no rotation needed, OIDC tokens are ephemeral)"
+    ostree_gpg: "Annual rotation, or immediately upon suspected compromise"
+    firmware_kms: "Annual rotation via cloud KMS automatic key rotation"
+
+  revocation:
+    procedure:
+      - "1. Disable the compromised GitHub Actions workflow immediately"
+      - "2. Revoke the OIDC trust relationship if Fulcio CA is compromised"
+      - "3. For GPG: publish revocation certificate to key distribution endpoint"
+      - "4. For KMS: disable the key version in cloud KMS console"
+      - "5. Issue emergency OTA update with new signing identity"
+      - "6. Update device verification configuration via fleet management"
+      - "7. Document the incident per incident-response-plan.md"
+
+    emergency_contact: "security-team@organization.com"
+
+# --- Compliance Mapping ---
+compliance:
+  iso21434:
+    - "Clause 7: Supply chain cybersecurity - signed artifacts ensure integrity"
+    - "Clause 10: Secure development - build provenance via SLSA"
+  iec62443:
+    - "FR3 (System Integrity): Cryptographic verification of all deployed software"
+    - "CR 3.4: Software and information integrity"
+  iso26262:
+    - "Part 8: Configuration management - signed baselines with audit trail"

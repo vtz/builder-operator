@@ -1,0 +1,50 @@
+# =============================================================================
+# TruffleHog Configuration - Secrets Detection
+# Standards: ISO 21434 Clause 10, IEC 62443 FR4 (Data Confidentiality)
+# =============================================================================
+
+# Detector configuration
+detectors:
+  # Enable all built-in detectors (800+ secret types)
+  enabled: all
+
+# Verification - check if detected secrets are live/active
+verification: true
+
+# Output format
+output:
+  format: json
+  file: trufflehog-results.json
+
+# Paths to exclude from scanning
+exclude:
+  paths:
+    - "test/fixtures/"
+    - "test/testdata/"
+    - "docs/"
+    - "*.md"
+    - "*.txt"
+    - ".git/"
+    - "build/out/"
+    - "coverage/"
+    - "vendor/"
+    - "third_party/"
+
+  # Exclude known test/example values
+  rules:
+    - "example.com"
+    - "localhost"
+    - "127.0.0.1"
+    - "EXAMPLE_KEY"
+    - "test-key"
+    - "dummy"
+
+# Scan depth for git history
+git:
+  max_depth: 100
+  include_branches: true
+  scan_since: ""  # Scan all history by default
+
+# Severity thresholds
+# TruffleHog findings are always treated as blocking in the quality gate
+fail_on_detection: true

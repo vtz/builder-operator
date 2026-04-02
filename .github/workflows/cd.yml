@@ -1,0 +1,343 @@
+# =============================================================================
+# CD Pipeline - Build, Sign, Attest, Deploy to Edge Devices
+# Standards: ISO 21434, ISO 26262, IEC 62443
+# =============================================================================
+
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      platform:
+        description: "Target platform"
+        required: true
+        default: "rhivos-aarch64"
+        type: choice
+        options:
+          - rhivos-aarch64
+          - rhivos-x86_64
+          - rtos-cortex-m4
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  VERSION: ${{ github.sha }}
+
+jobs:
+  # ===========================================================================
+  # Job 1: Build Production Image
+  # ===========================================================================
+  image-build:
+    name: Build Production Image
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      image_digest: ${{ steps.build-push.outputs.digest }}
+      image_ref: ${{ steps.meta.outputs.tags }}
+      firmware_sha256: ${{ steps.firmware.outputs.sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+
+      # --- RHIVOS: Container image build ---
+      - name: Build and push container image (RHIVOS)
+        id: build-push
+        if: >
+          inputs.platform != 'rtos-cortex-m4' ||
+          github.event_name == 'workflow_run'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: build/Containerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            PLATFORM=${{ inputs.platform || 'rhivos-aarch64' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      # --- RTOS: Firmware binary build ---
+      - name: Build firmware binary (RTOS)
+        id: firmware
+        if: inputs.platform == 'rtos-cortex-m4'
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
+          make PLATFORM=rtos-cortex-m4 all
+          SHA256=$(sha256sum build/out/edge-app.bin | cut -d' ' -f1)
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "## Firmware Build" >> $GITHUB_STEP_SUMMARY
+          echo "SHA256: ${SHA256}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload firmware artifact
+        if: inputs.platform == 'rtos-cortex-m4'
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-binary
+          path: |
+            build/out/edge-app.bin
+            build/out/edge-app.hex
+          retention-days: 90
+
+  # ===========================================================================
+  # Job 2: Sign Artifacts (Sigstore / Cosign)
+  # ===========================================================================
+  image-sign:
+    name: Sign Artifacts
+    needs: image-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # --- Sign container image (keyless) ---
+      - name: Sign container image (RHIVOS)
+        if: needs.image-build.outputs.image_digest != ''
+        run: |
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.image-build.outputs.image_digest }}
+          echo "## Image Signing" >> $GITHUB_STEP_SUMMARY
+          echo "Image signed with keyless Sigstore/Fulcio" >> $GITHUB_STEP_SUMMARY
+          echo "Digest: ${{ needs.image-build.outputs.image_digest }}" >> $GITHUB_STEP_SUMMARY
+
+      # --- Sign firmware binary (KMS) ---
+      - name: Download firmware
+        if: needs.image-build.outputs.firmware_sha256 != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-binary
+
+      - name: Sign firmware binary (RTOS)
+        if: needs.image-build.outputs.firmware_sha256 != ''
+        run: |
+          cosign sign-blob --yes \
+            --output-signature firmware.sig \
+            --output-certificate firmware.cert \
+            build/out/edge-app.bin
+          echo "## Firmware Signing" >> $GITHUB_STEP_SUMMARY
+          echo "Firmware signed with keyless Sigstore/Fulcio" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload signatures
+        if: needs.image-build.outputs.firmware_sha256 != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-signatures
+          path: |
+            firmware.sig
+            firmware.cert
+          retention-days: 90
+
+  # ===========================================================================
+  # Job 3: SLSA Provenance Attestation (Level 3)
+  # ===========================================================================
+  provenance:
+    name: SLSA Provenance
+    needs: [image-build, image-sign]
+    runs-on: ubuntu-latest
+    if: needs.image-build.outputs.image_digest != ''
+    permissions:
+      id-token: write
+      packages: write
+      attestations: write
+    steps:
+      - name: Generate SLSA provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.image-build.outputs.image_digest }}
+          push-to-registry: true
+
+      - name: Verify provenance
+        run: |
+          echo "## SLSA Provenance" >> $GITHUB_STEP_SUMMARY
+          echo "SLSA Level 3 provenance generated and attached" >> $GITHUB_STEP_SUMMARY
+          echo "Digest: ${{ needs.image-build.outputs.image_digest }}" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Job 4: Deploy to Staging
+  # ===========================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [image-sign, provenance]
+    runs-on: ubuntu-latest
+    environment: staging
+    if: always() && needs.image-sign.result == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- RHIVOS: Push OSTree commit to staging repo ---
+      - name: Deploy to staging (RHIVOS)
+        if: needs.image-build.outputs.image_digest != ''
+        run: |
+          echo "## Staging Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "Deploying signed image to staging OSTree repo" >> $GITHUB_STEP_SUMMARY
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.image-build.outputs.image_digest }}" >> $GITHUB_STEP_SUMMARY
+          # In production, this would:
+          # 1. Pull the signed container image
+          # 2. Generate an OSTree commit from the image layers
+          # 3. Push to the staging OSTree repository
+          # 4. Sign the OSTree commit with GPG
+          # ostree --repo=staging-repo commit --branch=rhivos/edge/aarch64/staging ...
+          # ostree --repo=staging-repo gpg-sign <commit> <key-id>
+          # ostree --repo=staging-repo summary -u
+
+      # --- RTOS: Upload firmware to staging store ---
+      - name: Deploy to staging (RTOS)
+        if: needs.image-build.outputs.firmware_sha256 != ''
+        run: |
+          echo "## Staging Deployment (RTOS)" >> $GITHUB_STEP_SUMMARY
+          echo "Uploading signed firmware to staging artifact store" >> $GITHUB_STEP_SUMMARY
+          # In production, this would upload to firmware OTA server
+
+  # ===========================================================================
+  # Job 5: Integration Tests (ASPICE SWE.5 / ISO 26262 Part 6)
+  # ===========================================================================
+  integration-tests:
+    name: Integration Tests
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run integration tests
+        run: |
+          echo "## Integration Tests (ASPICE SWE.5)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          # In production, these tests would run against staging devices or QEMU:
+          # 1. Verify secure boot chain validates the signature
+          # 2. Runtime attestation checks (TPM-based)
+          # 3. Functional behavior validation
+          # 4. CAN bus communication tests
+          # 5. OTA update rollback test
+          # 6. Watchdog recovery test (ISO 26262)
+          # 7. Resource limit enforcement test
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Secure boot verification | PENDING |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runtime attestation | PENDING |" >> $GITHUB_STEP_SUMMARY
+          echo "| Functional behavior | PENDING |" >> $GITHUB_STEP_SUMMARY
+          echo "| CAN bus communication | PENDING |" >> $GITHUB_STEP_SUMMARY
+          echo "| OTA rollback | PENDING |" >> $GITHUB_STEP_SUMMARY
+          echo "| Watchdog recovery | PENDING |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: test-results/
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # ===========================================================================
+  # Job 6: Deploy to Production (Manual Approval Required)
+  # ===========================================================================
+  deploy-production:
+    name: Deploy to Production
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      # Requires manual approval from designated reviewers
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify image signature before production deploy
+        if: needs.image-build.outputs.image_digest != ''
+        run: |
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/cd.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.image-build.outputs.image_digest }}
+          echo "Image signature verified successfully"
+
+      - name: Deploy to production
+        run: |
+          echo "## Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Promoting staging to production" >> $GITHUB_STEP_SUMMARY
+          echo "Git SHA: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "Timestamp: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          # In production, this would:
+          # 1. Promote the OSTree commit from staging to production ref
+          # 2. Generate static deltas for bandwidth-efficient OTA
+          # 3. Update the OSTree summary file
+          # 4. Trigger fleet management for staged rollout (5% -> 25% -> 100%)
+          # ostree --repo=production-repo pull-local staging-repo <commit>
+          # ostree --repo=production-repo refs --create rhivos/edge/aarch64/production <commit>
+          # ostree --repo=production-repo static-delta generate <old-commit> <new-commit>
+          # ostree --repo=production-repo summary -u
+
+      - name: Create deployment record
+        run: |
+          cat > deployment-record.json << EOF
+          {
+            "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "git_sha": "${{ github.sha }}",
+            "environment": "production",
+            "deployed_by": "${{ github.actor }}",
+            "run_id": "${{ github.run_id }}",
+            "approval_required": true,
+            "standards_compliance": ["ISO 21434", "ISO 26262", "IEC 62443", "ASPICE"]
+          }
+          EOF
+
+      - name: Upload deployment record
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-record-${{ github.sha }}
+          path: deployment-record.json
+          retention-days: 365

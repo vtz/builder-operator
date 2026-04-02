@@ -1,0 +1,115 @@
+# =============================================================================
+# Multi-Stage Container Build: RHIVOS Edge Application
+# Stages: builder -> scanner -> runtime
+# Standards: ISO 21434, ISO 26262, IEC 62443
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Stage 1: Builder - Compile the edge application
+# ---------------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi9/ubi:latest AS builder
+
+ARG PLATFORM=rhivos-aarch64
+ARG VERSION=0.1.0
+ARG GIT_SHA=unknown
+
+RUN dnf install -y --nodocs \
+    gcc gcc-c++ make cmake git \
+    glibc-devel glibc-static \
+    openssl-devel \
+    && dnf clean all
+
+# Install cross-compilation toolchain for AArch64 if needed
+RUN if [ "$PLATFORM" = "rhivos-aarch64" ]; then \
+      dnf install -y --nodocs gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu && dnf clean all; \
+    fi
+
+WORKDIR /build
+COPY . .
+
+# Build with hardening flags
+RUN make PLATFORM=${PLATFORM} all
+RUN make PLATFORM=${PLATFORM} test && echo "Unit tests passed (ASPICE SWE.4)"
+
+# ---------------------------------------------------------------------------
+# Stage 2: Scanner - Generate SBOMs and run vulnerability scan
+# ---------------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS scanner
+
+ARG VERSION=0.1.0
+
+# Install scanning tools
+RUN microdnf install -y curl tar gzip && microdnf clean all
+
+# Install Syft for SBOM generation
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+# Install Trivy for vulnerability scanning
+RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+WORKDIR /scan
+COPY --from=builder /build .
+
+# Generate SBOM in both CycloneDX and SPDX formats (ISO 21434 supply chain)
+RUN mkdir -p /scan/artifacts/sbom && \
+    syft dir:/scan -o cyclonedx-json=/scan/artifacts/sbom/sbom.cyclonedx.json && \
+    syft dir:/scan -o spdx-json=/scan/artifacts/sbom/sbom.spdx.json
+
+# Run vulnerability scan
+RUN mkdir -p /scan/artifacts/vuln && \
+    trivy fs --format json --output /scan/artifacts/vuln/trivy-report.json \
+      --severity CRITICAL,HIGH,MEDIUM /scan || true
+
+# ---------------------------------------------------------------------------
+# Stage 3: Runtime - Minimal production image
+# ---------------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest AS runtime
+
+ARG VERSION=0.1.0
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+ARG PLATFORM=rhivos-aarch64
+
+# OCI Image Labels (ISO 21434 traceability)
+LABEL org.opencontainers.image.title="edge-app" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.vendor="Organization" \
+      org.opencontainers.image.description="RHIVOS Edge Application" \
+      org.opencontainers.image.source="https://github.com/org/edge-app" \
+      com.redhat.component="edge-app" \
+      com.automotive.platform="${PLATFORM}" \
+      com.automotive.sbom-ref="sbom.cyclonedx.json" \
+      com.automotive.iso21434="compliant" \
+      com.automotive.iso26262-asil="B" \
+      com.automotive.iec62443-sl="SL2"
+
+# Create non-root user (IEC 62443 FR1: Identification and Authentication)
+RUN echo "edge-app:x:1001:1001:Edge Application:/app:/sbin/nologin" >> /etc/passwd && \
+    echo "edge-app:x:1001:" >> /etc/group
+
+WORKDIR /app
+
+# Copy only the compiled binary (minimal attack surface)
+COPY --from=builder --chown=1001:1001 /build/build/out/edge-app /app/edge-app
+
+# Copy SBOM artifacts for runtime reference
+COPY --from=scanner /scan/artifacts/sbom/ /app/sbom/
+
+# No ports exposed by default (IEC 62443 FR5: Restricted Data Flow)
+# Uncomment if the application requires network access:
+# EXPOSE 8080
+
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/app/edge-app", "--health-check"]
+
+# Run as non-root user
+USER 1001:1001
+
+# Read-only filesystem (ISO 26262 system integrity)
+# Mount /tmp and /var/log as tmpfs at runtime if needed
+
+ENTRYPOINT ["/app/edge-app"]
+CMD ["--config", "/app/config/edge-app.yml"]
