@@ -1,8 +1,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: builder-operator-controller-manager
-  namespace: builder-operator-system
+  name: bob-controller-manager
+  namespace: bob-system
 spec:
   selector:
     matchLabels:
@@ -12,8 +12,9 @@ spec:
     metadata:
       labels:
         control-plane: controller-manager
+        app: bob-api
     spec:
-      serviceAccountName: builder-operator-controller-manager
+      serviceAccountName: bob-controller-manager
       containers:
         - name: manager
           image: controller:latest
@@ -21,7 +22,15 @@ spec:
             - /manager
           args:
             - --leader-elect
+            - --api-bind-address=:8082
+          ports:
+            - name: api
+              containerPort: 8082
+              protocol: TCP
           resources:
             limits:
               cpu: 500m
               memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi

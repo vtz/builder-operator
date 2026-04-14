@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	buildv1alpha1 "github.com/example/builder-operator/api/v1alpha1"
+	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,48 +32,40 @@ const (
 	integrationTimeout      = 15 * time.Second
 )
 
-// TestReconcile_CreatesPipelineRunOnFirstReconcile verifies that the controller
-// creates a PipelineRun and sets Status.CurrentPipelineRun when a new
-// SoftwareBuild is reconciled for the first time.
 func TestReconcile_CreatesPipelineRunOnFirstReconcile(t *testing.T) {
 	if testClient == nil {
 		t.Skip("integration test requires KUBEBUILDER_ASSETS to be set")
 	}
 
 	ctx := context.Background()
-	sb := &buildv1alpha1.SoftwareBuild{
+	bj := &buildv1alpha1.BuildJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "integration-first-reconcile",
 			Namespace: "default",
 		},
-		Spec: buildv1alpha1.SoftwareBuildSpec{
-			Runtime: buildv1alpha1.RuntimeSpec{Image: "ubuntu:24.04"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Toolchain: buildv1alpha1.ToolchainSpec{Image: "ubuntu:24.04"},
 			Source: buildv1alpha1.SourceSpec{
-				Type: buildv1alpha1.SourceTypeHostPath,
-				HostPath: &buildv1alpha1.HostPathSource{Path: "/src"},
+				Type: buildv1alpha1.SourceTypePVC,
+				PVC:  &buildv1alpha1.PVCSource{ClaimName: "src"},
 			},
-			Stages: buildv1alpha1.PipelineStages{
-				Fetch:     buildv1alpha1.StageSpec{Command: "echo fetch"},
-				Prebuild:  buildv1alpha1.StageSpec{Command: "echo pre"},
-				Build:     buildv1alpha1.StageSpec{Command: "echo build"},
-				Postbuild: buildv1alpha1.StageSpec{Command: "echo post"},
-				Deploy:    buildv1alpha1.StageSpec{Command: "echo deploy"},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "fetch", StageSpec: buildv1alpha1.StageSpec{Command: "echo fetch"}},
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "echo build"}},
+				{Name: "deploy", StageSpec: buildv1alpha1.StageSpec{Command: "echo deploy"}},
 			},
-			Destination: buildv1alpha1.DestinationSpec{
-				Type: buildv1alpha1.DestinationTypeSharedFolder,
-				Path: "/out",
-			},
+			Artifacts: buildv1alpha1.ArtifactSpec{Path: "/out"},
 		},
 	}
 
-	if err := testClient.Create(ctx, sb); err != nil {
-		t.Fatalf("failed to create SoftwareBuild: %v", err)
+	if err := testClient.Create(ctx, bj); err != nil {
+		t.Fatalf("failed to create BuildJob: %v", err)
 	}
-	t.Cleanup(func() { _ = testClient.Delete(ctx, sb) })
+	t.Cleanup(func() { _ = testClient.Delete(ctx, bj) })
 
-	key := types.NamespacedName{Name: sb.Name, Namespace: sb.Namespace}
+	key := types.NamespacedName{Name: bj.Name, Namespace: bj.Namespace}
 	if err := waitUntil(ctx, t, func() bool {
-		var current buildv1alpha1.SoftwareBuild
+		var current buildv1alpha1.BuildJob
 		if err := testClient.Get(ctx, key, &current); err != nil {
 			return false
 		}
@@ -82,9 +74,9 @@ func TestReconcile_CreatesPipelineRunOnFirstReconcile(t *testing.T) {
 		t.Fatalf("timed out waiting for CurrentPipelineRun to be set: %v", err)
 	}
 
-	var current buildv1alpha1.SoftwareBuild
+	var current buildv1alpha1.BuildJob
 	if err := testClient.Get(ctx, key, &current); err != nil {
-		t.Fatalf("failed to get SoftwareBuild: %v", err)
+		t.Fatalf("failed to get BuildJob: %v", err)
 	}
 
 	prName := current.Status.CurrentPipelineRun
@@ -98,7 +90,7 @@ func TestReconcile_CreatesPipelineRunOnFirstReconcile(t *testing.T) {
 		Version: "v1",
 		Kind:    "PipelineRun",
 	})
-	if err := testClient.Get(ctx, client.ObjectKey{Namespace: sb.Namespace, Name: prName}, &pr); err != nil {
+	if err := testClient.Get(ctx, client.ObjectKey{Namespace: bj.Namespace, Name: prName}, &pr); err != nil {
 		t.Fatalf("expected PipelineRun %q to exist: %v", prName, err)
 	}
 
@@ -107,50 +99,39 @@ func TestReconcile_CreatesPipelineRunOnFirstReconcile(t *testing.T) {
 	}
 }
 
-// TestReconcile_PhaseFailedWhenPipelineRunMissing verifies that the controller
-// transitions the SoftwareBuild phase to Failed when the referenced PipelineRun
-// no longer exists.
 func TestReconcile_PhaseFailedWhenPipelineRunMissing(t *testing.T) {
 	if testClient == nil {
 		t.Skip("integration test requires KUBEBUILDER_ASSETS to be set")
 	}
 
 	ctx := context.Background()
-	sb := &buildv1alpha1.SoftwareBuild{
+	bj := &buildv1alpha1.BuildJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "integration-missing-pr",
 			Namespace: "default",
 		},
-		Spec: buildv1alpha1.SoftwareBuildSpec{
-			Runtime: buildv1alpha1.RuntimeSpec{Image: "ubuntu:24.04"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Toolchain: buildv1alpha1.ToolchainSpec{Image: "ubuntu:24.04"},
 			Source: buildv1alpha1.SourceSpec{
-				Type:     buildv1alpha1.SourceTypeHostPath,
-				HostPath: &buildv1alpha1.HostPathSource{Path: "/src"},
+				Type: buildv1alpha1.SourceTypePVC,
+				PVC:  &buildv1alpha1.PVCSource{ClaimName: "src"},
 			},
-			Stages: buildv1alpha1.PipelineStages{
-				Fetch:     buildv1alpha1.StageSpec{Command: "echo fetch"},
-				Prebuild:  buildv1alpha1.StageSpec{Command: "echo pre"},
-				Build:     buildv1alpha1.StageSpec{Command: "echo build"},
-				Postbuild: buildv1alpha1.StageSpec{Command: "echo post"},
-				Deploy:    buildv1alpha1.StageSpec{Command: "echo deploy"},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "echo build"}},
 			},
-			Destination: buildv1alpha1.DestinationSpec{
-				Type: buildv1alpha1.DestinationTypeSharedFolder,
-				Path: "/out",
-			},
+			Artifacts: buildv1alpha1.ArtifactSpec{Path: "/out"},
 		},
 	}
 
-	if err := testClient.Create(ctx, sb); err != nil {
-		t.Fatalf("failed to create SoftwareBuild: %v", err)
+	if err := testClient.Create(ctx, bj); err != nil {
+		t.Fatalf("failed to create BuildJob: %v", err)
 	}
-	t.Cleanup(func() { _ = testClient.Delete(ctx, sb) })
+	t.Cleanup(func() { _ = testClient.Delete(ctx, bj) })
 
-	key := types.NamespacedName{Name: sb.Name, Namespace: sb.Namespace}
+	key := types.NamespacedName{Name: bj.Name, Namespace: bj.Namespace}
 
-	// Wait for the controller to create the PipelineRun and set the reference.
 	if err := waitUntil(ctx, t, func() bool {
-		var current buildv1alpha1.SoftwareBuild
+		var current buildv1alpha1.BuildJob
 		if err := testClient.Get(ctx, key, &current); err != nil {
 			return false
 		}
@@ -159,23 +140,21 @@ func TestReconcile_PhaseFailedWhenPipelineRunMissing(t *testing.T) {
 		t.Fatalf("timed out waiting for CurrentPipelineRun to be set: %v", err)
 	}
 
-	var current buildv1alpha1.SoftwareBuild
+	var current buildv1alpha1.BuildJob
 	if err := testClient.Get(ctx, key, &current); err != nil {
-		t.Fatalf("failed to get SoftwareBuild: %v", err)
+		t.Fatalf("failed to get BuildJob: %v", err)
 	}
 
-	// Delete the PipelineRun to simulate it going missing.
 	var pr unstructured.Unstructured
 	pr.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRun"})
 	pr.SetName(current.Status.CurrentPipelineRun)
-	pr.SetNamespace(sb.Namespace)
+	pr.SetNamespace(bj.Namespace)
 	if err := testClient.Delete(ctx, &pr); err != nil {
 		t.Fatalf("failed to delete PipelineRun: %v", err)
 	}
 
-	// The controller should detect the missing PipelineRun and set phase to Failed.
 	if err := waitUntil(ctx, t, func() bool {
-		var updated buildv1alpha1.SoftwareBuild
+		var updated buildv1alpha1.BuildJob
 		if err := testClient.Get(ctx, key, &updated); err != nil {
 			return false
 		}
@@ -184,9 +163,9 @@ func TestReconcile_PhaseFailedWhenPipelineRunMissing(t *testing.T) {
 		t.Fatalf("timed out waiting for phase Failed: %v", err)
 	}
 
-	var updated buildv1alpha1.SoftwareBuild
+	var updated buildv1alpha1.BuildJob
 	if err := testClient.Get(ctx, key, &updated); err != nil {
-		t.Fatalf("failed to get updated SoftwareBuild: %v", err)
+		t.Fatalf("failed to get updated BuildJob: %v", err)
 	}
 	if updated.Status.FailureReason != "PipelineRunNotFound" {
 		t.Fatalf("expected FailureReason PipelineRunNotFound, got %q", updated.Status.FailureReason)

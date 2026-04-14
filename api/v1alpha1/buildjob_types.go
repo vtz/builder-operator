@@ -19,23 +19,20 @@ import (
 )
 
 type SourceType string
-type DestinationType string
-type SoftwareBuildPhase string
+type ArtifactDestinationType string
+type BuildJobPhase string
 
 const (
-	SourceTypeGit      SourceType = "git"
-	SourceTypePVC      SourceType = "pvc"
-	SourceTypeHostPath SourceType = "hostPath"
+	SourceTypeGit SourceType = "git"
+	SourceTypePVC SourceType = "pvc"
 
-	DestinationTypeSharedFolder DestinationType = "sharedFolder"
-	DestinationTypeRegistry     DestinationType = "registry"
-	DestinationTypeArtifactory  DestinationType = "artifactory"
-	DestinationTypeQuay         DestinationType = "quay"
+	ArtifactDestinationPVC ArtifactDestinationType = "pvc"
+	ArtifactDestinationOCI ArtifactDestinationType = "oci"
 
-	PhasePending   SoftwareBuildPhase = "Pending"
-	PhaseRunning   SoftwareBuildPhase = "Running"
-	PhaseSucceeded SoftwareBuildPhase = "Succeeded"
-	PhaseFailed    SoftwareBuildPhase = "Failed"
+	PhasePending   BuildJobPhase = "Pending"
+	PhaseRunning   BuildJobPhase = "Running"
+	PhaseSucceeded BuildJobPhase = "Succeeded"
+	PhaseFailed    BuildJobPhase = "Failed"
 )
 
 type SecretReference struct {
@@ -45,8 +42,8 @@ type SecretReference struct {
 	Key string `json:"key,omitempty"`
 }
 
-type RuntimeSpec struct {
-	// +kubebuilder:default=ubuntu:24.04
+type ToolchainSpec struct {
+	// +kubebuilder:default="ubuntu:24.04"
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image,omitempty"`
 	// +optional
@@ -69,20 +66,26 @@ type PVCSource struct {
 	Path string `json:"path,omitempty"`
 }
 
-type HostPathSource struct {
-	// +kubebuilder:validation:MinLength=1
-	Path string `json:"path"`
-}
-
 type SourceSpec struct {
-	// +kubebuilder:validation:Enum=git;pvc;hostPath
+	// +kubebuilder:validation:Enum=git;pvc
 	Type SourceType `json:"type"`
 	// +optional
 	Git *GitSource `json:"git,omitempty"`
 	// +optional
 	PVC *PVCSource `json:"pvc,omitempty"`
+}
+
+type TargetSpec struct {
 	// +optional
-	HostPath *HostPathSource `json:"hostPath,omitempty"`
+	Board string `json:"board,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Enum=zephyr;openbsw;cmake;custom
+	Platform string `json:"platform,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Enum=arm;riscv;xtensa;x86;native
+	Architecture string `json:"architecture,omitempty"`
+	// +optional
+	Variant string `json:"variant,omitempty"`
 }
 
 type StageSpec struct {
@@ -92,50 +95,55 @@ type StageSpec struct {
 	Image string `json:"image,omitempty"`
 }
 
-type PipelineStages struct {
-	Fetch StageSpec `json:"fetch"`
-	Prebuild StageSpec `json:"prebuild"`
-	Build StageSpec `json:"build"`
-	Postbuild StageSpec `json:"postbuild"`
-	Deploy StageSpec `json:"deploy"`
-}
-
-type DestinationSpec struct {
-	// +kubebuilder:validation:Enum=sharedFolder;registry;artifactory;quay
-	Type DestinationType `json:"type"`
+type ArtifactSpec struct {
+	// +kubebuilder:validation:Enum=pvc;oci
+	// +kubebuilder:default=pvc
+	Destination ArtifactDestinationType `json:"destination,omitempty"`
 	// +optional
 	Path string `json:"path,omitempty"`
-	// +optional
-	Repository string `json:"repository,omitempty"`
-	// +optional
-	CredentialsSecretRef *SecretReference `json:"credentialsSecretRef,omitempty"`
 }
 
-type SoftwareBuildSpec struct {
+type CacheMount struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mountPath"`
+}
+
+type BuildJobSpec struct {
 	// +optional
-	Runtime RuntimeSpec `json:"runtime,omitempty"`
-	Source SourceSpec `json:"source"`
-	Stages PipelineStages `json:"stages"`
-	Destination DestinationSpec `json:"destination"`
+	Toolchain ToolchainSpec `json:"toolchain,omitempty"`
+	Source    SourceSpec     `json:"source"`
 	// +optional
-	TimeoutSeconds int64 `json:"timeoutSeconds,omitempty"`
+	Target TargetSpec `json:"target,omitempty"`
+
+	// Stages is an ordered list of named build stages.
+	// Each stage runs sequentially in the toolchain container.
+	Stages []NamedStage `json:"stages"`
+
+	// +optional
+	Artifacts ArtifactSpec `json:"artifacts,omitempty"`
+	// +optional
+	Caches []CacheMount `json:"caches,omitempty"`
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+}
+
+type NamedStage struct {
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	StageSpec `json:",inline"`
 }
 
 type StageStatus struct {
 	Name string `json:"name,omitempty"`
-	// +optional
-	StartedAt *metav1.Time `json:"startedAt,omitempty"`
-	// +optional
-	FinishedAt *metav1.Time `json:"finishedAt,omitempty"`
 	// +optional
 	State string `json:"state,omitempty"`
 	// +optional
 	Message string `json:"message,omitempty"`
 }
 
-type SoftwareBuildStatus struct {
+type BuildJobStatus struct {
 	// +optional
-	Phase SoftwareBuildPhase `json:"phase,omitempty"`
+	Phase BuildJobPhase `json:"phase,omitempty"`
 	// +optional
 	CurrentPipelineRun string `json:"currentPipelineRun,omitempty"`
 	// +optional
@@ -150,22 +158,26 @@ type SoftwareBuildStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=softwarebuilds,scope=Namespaced,shortName=sb
-type SoftwareBuild struct {
-	metav1.TypeMeta `json:",inline"`
+// +kubebuilder:resource:path=buildjobs,scope=Namespaced,shortName=bj
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Board",type=string,JSONPath=`.spec.target.board`
+// +kubebuilder:printcolumn:name="Platform",type=string,JSONPath=`.spec.target.platform`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+type BuildJob struct {
+	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SoftwareBuildSpec   `json:"spec,omitempty"`
-	Status SoftwareBuildStatus `json:"status,omitempty"`
+	Spec   BuildJobSpec   `json:"spec,omitempty"`
+	Status BuildJobStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
-type SoftwareBuildList struct {
+type BuildJobList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []SoftwareBuild `json:"items"`
+	Items           []BuildJob `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&SoftwareBuild{}, &SoftwareBuildList{})
+	SchemeBuilder.Register(&BuildJob{}, &BuildJobList{})
 }

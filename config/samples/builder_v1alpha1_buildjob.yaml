@@ -1,0 +1,20 @@
+apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
+kind: BuildJob
+metadata:
+  name: hello-world
+  namespace: bob-builds
+spec:
+  toolchain:
+    image: gcc:13
+  source:
+    type: pvc
+    pvc:
+      claimName: source-code
+  stages:
+    - name: build
+      command: "g++ /workspace/hello.cpp -o /workspace/hello"
+    - name: test
+      command: "/workspace/hello"
+  artifacts:
+    destination: pvc
+    path: /workspace

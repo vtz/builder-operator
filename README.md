@@ -1,19 +1,15 @@
-# Builder Operator
+# bob — The Builder
 
-`builder-operator` is a Kubernetes operator (Go + Kubebuilder style) that provides a single customizable CRD (`SoftwareBuild`) and reconciles each CR to a Tekton `PipelineRun`.
+`bob` is a Kubernetes operator for building embedded software on OpenShift (or any Tekton-capable cluster). It builds firmware and software for any target — Zephyr, OpenBSW, FreeRTOS, AUTOSAR Classic, bare-metal C, or any toolchain that runs in a container.
 
-## What this operator provides
+## What bob provides
 
-- One customer-facing CRD: `SoftwareBuild`
-- Five configurable stages:
-  - `fetch`
-  - `prebuild`
-  - `build`
-  - `postbuild`
-  - `deploy`
-- Per-stage command and image override support
-- Secrets via references (`secretRef`) for git/artifactory/registry credentials
-- CR status synchronization from Tekton `PipelineRun` state
+- **BuildJob CRD** — declare what to build, which toolchain container to use, and what board/platform to target.
+- **Target-aware builds** — first-class `board`, `platform`, and `architecture` fields with `${BOB_BOARD}`, `${BOB_PLATFORM}`, `${BOB_ARCH}` variable substitution.
+- **Flexible stages** — user-defined stage names and ordering (not limited to fixed five).
+- **Per-stage image overrides** — use different containers for different stages (e.g. flash tool for deploy).
+- **Inline Tekton pipelines** — no pre-installed Pipeline resource needed; the operator generates the full PipelineRun.
+- **Security** — `allowPrivilegeEscalation: false` on all build steps, shell-quoted commands.
 
 ## Quickstart
 
@@ -21,46 +17,52 @@
 2. Apply the CRD:
 
 ```bash
-kubectl apply -f config/crd/bases/build.mycompany.io_softwarebuilds.yaml
+kubectl apply -f config/crd/bases/builder.sdv.cloud.redhat.com_buildjobs.yaml
 ```
 
-3. Apply a Tekton pipeline compatible with this operator:
-
-```bash
-kubectl apply -f ../tekton/pipeline.yaml
-```
-
-4. Run the operator locally:
+3. Run the operator locally:
 
 ```bash
 go run ./main.go
 ```
 
-5. Create a sample CR:
+4. Create a sample BuildJob:
 
 ```bash
-kubectl apply -f config/samples/build_v1alpha1_softwarebuild.yaml
+kubectl apply -f docs/examples/zephyr-hello-world.yaml
 ```
 
-6. Inspect status:
+5. Inspect status:
 
 ```bash
-kubectl get softwarebuild hello-cpp -n hello-demo -o yaml
-kubectl get pipelineruns -n hello-demo
+kubectl get buildjob -n bob-builds
+kubectl get pipelineruns -n bob-builds
 ```
 
-## Documentation
+## Local development with Kind
 
-- [Architecture](docs/architecture.md)
-- [API Reference](docs/api.md)
-- [Examples](docs/examples)
-- [Troubleshooting](docs/troubleshooting.md)
+```bash
+./hack/setup-cluster.sh    # create kind cluster + install Tekton
+./hack/run-zephyr.sh       # build Zephyr hello_world
+./hack/run-openbsw.sh      # build OpenBSW posix-freertos
+```
+
+## Examples
+
+| Example | Target | File |
+|---------|--------|------|
+| Zephyr hello_world (native_sim) | `zephyr` / `native` | [zephyr-hello-world.yaml](docs/examples/zephyr-hello-world.yaml) |
+| Zephyr cross-compile (Nucleo) | `zephyr` / `arm` | [zephyr-nucleo-cross.yaml](docs/examples/zephyr-nucleo-cross.yaml) |
+| OpenBSW posix-freertos | `openbsw` / `x86` | [openbsw-posix-freertos.yaml](docs/examples/openbsw-posix-freertos.yaml) |
+| C++ hello world | `cmake` / `native` | [hello-world-shared-folder.yaml](docs/examples/hello-world-shared-folder.yaml) |
 
 ## Repository layout
 
-- `api/v1alpha1`: CRD types
-- `internal/controller`: reconcile logic
-- `internal/tekton`: PipelineRun rendering logic
-- `config`: manifests (CRD/RBAC/manager/sample)
-- `docs`: architecture and usage docs
-- `hack`: scripts for local validation
+```
+api/v1alpha1/       CRD types (BuildJob)
+internal/controller/ reconcile logic (BuildJobReconciler)
+internal/tekton/     PipelineRun generation
+config/              manifests (CRD, RBAC, manager)
+docs/examples/       example BuildJob CRs
+hack/                scripts for local validation
+```

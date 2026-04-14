@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package v1alpha1 contains API Schema definitions for the build v1alpha1 API group.
+// Package v1alpha1 contains API Schema definitions for the builder v1alpha1 API group.
 // +kubebuilder:object:generate=true
-// +groupName=build.mycompany.io
+// +groupName=builder.sdv.cloud.redhat.com
 package v1alpha1
 
 import (
@@ -24,18 +24,9 @@ import (
 )
 
 var (
-	GroupVersion = schema.GroupVersion{Group: "build.mycompany.io", Version: "v1alpha1"}
+	GroupVersion  = schema.GroupVersion{Group: "builder.sdv.cloud.redhat.com", Version: "v1alpha1"}
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
-	AddToScheme = SchemeBuilder.AddToScheme
-)
-
-var (
-	SoftwareBuildKind = GroupVersion.WithKind("SoftwareBuild")
-	SoftwareBuildGVK  = schema.GroupVersionKind{
-		Group:   GroupVersion.Group,
-		Version: GroupVersion.Version,
-		Kind:    "SoftwareBuild",
-	}
+	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
 func NewCondition(t string, status metav1.ConditionStatus, reason, message string, generation int64) metav1.Condition {

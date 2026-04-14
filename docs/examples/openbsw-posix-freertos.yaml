@@ -1,28 +1,41 @@
-apiVersion: build.mycompany.io/v1alpha1
-kind: SoftwareBuild
+apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
+kind: BuildJob
 metadata:
   name: openbsw-posix-freertos
-  namespace: hello-demo
+  namespace: bob-builds
 spec:
-  runtime:
+  toolchain:
     image: ubuntu:24.04
   source:
     type: git
     git:
       url: https://github.com/eclipse-openbsw/openbsw.git
       revision: main
-  timeoutSeconds: 3600
+  target:
+    platform: openbsw
+    architecture: x86
   stages:
-    fetch:
-      command: apt-get update -qq && apt-get install -y --no-install-recommends ca-certificates git cmake ninja-build g++ python3 && git clone --depth 1 https://github.com/eclipse-openbsw/openbsw.git fetched
-    prebuild:
-      command: apt-get update -qq && apt-get install -y --no-install-recommends cmake ninja-build g++ && cd fetched && cmake --preset posix-freertos
-    build:
-      command: apt-get update -qq && apt-get install -y --no-install-recommends cmake ninja-build g++ && cd fetched && cmake --build --preset posix-freertos
-    postbuild:
-      command: find fetched/build/posix-freertos -name 'app.referenceApp.elf' -type f | head -5
-    deploy:
-      command: mkdir -p /host-build/deployment/openbsw-posix-freertos && cp fetched/build/posix-freertos/executables/referenceApp/application/Release/app.referenceApp.elf /host-build/deployment/openbsw-posix-freertos/ 2>/dev/null || true
-  destination:
-    type: sharedFolder
-    path: /host-build/deployment/openbsw-posix-freertos
+    - name: fetch
+      command: >-
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends ca-certificates git cmake ninja-build g++ python3 &&
+        git clone --depth 1 https://github.com/eclipse-openbsw/openbsw.git /workspace/openbsw
+    - name: configure
+      command: >-
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends cmake ninja-build g++ &&
+        cd /workspace/openbsw && cmake --preset posix-freertos
+    - name: build
+      command: >-
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends cmake ninja-build g++ &&
+        cd /workspace/openbsw && cmake --build --preset posix-freertos
+    - name: package
+      command: >-
+        mkdir -p /workspace/artifacts &&
+        cp /workspace/openbsw/build/posix-freertos/executables/referenceApp/application/Release/app.referenceApp.elf
+        /workspace/artifacts/ 2>/dev/null || true
+  artifacts:
+    destination: pvc
+    path: /workspace/artifacts
+  timeout: 60m

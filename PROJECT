@@ -1,7 +1,7 @@
-domain: mycompany.io
+domain: sdv.cloud.redhat.com
 layout:
 - go.kubebuilder.io/v4
 multigroup: false
-projectName: builder-operator
-repo: github.com/example/builder-operator
+projectName: bob
+repo: github.com/centos-automotive-suite/bob
 version: "3"

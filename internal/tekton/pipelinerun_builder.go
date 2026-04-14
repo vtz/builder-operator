@@ -16,59 +16,59 @@ package tekton
 
 import (
 	"fmt"
-	"time"
+	"strings"
 
-	buildv1alpha1 "github.com/example/builder-operator/api/v1alpha1"
+	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
 	TektonAPIVersion = "tekton.dev/v1"
 	PipelineRunKind  = "PipelineRun"
-	PipelineName     = "configurable-build-pipeline"
 )
 
-func BuildPipelineRun(sb *buildv1alpha1.SoftwareBuild) *unstructured.Unstructured {
+func BuildPipelineRun(bj *buildv1alpha1.BuildJob) *unstructured.Unstructured {
 	labels := map[string]interface{}{
-		"build.mycompany.io/softwarebuild": sb.Name,
+		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
 	}
 
-	prName := fmt.Sprintf("%s-%d", sb.Name, time.Now().Unix())
-	image := sb.Spec.Runtime.Image
+	prName := fmt.Sprintf("%s-gen%d", bj.Name, bj.Generation)
+
+	image := bj.Spec.Toolchain.Image
 	if image == "" {
 		image = "ubuntu:24.04"
 	}
 
-	obj := map[string]interface{}{
-		"apiVersion": TektonAPIVersion,
-		"kind":       PipelineRunKind,
-		"metadata": map[string]interface{}{
-			"name":      prName,
-			"namespace": sb.Namespace,
-			"labels":    labels,
-		},
-		"spec": map[string]interface{}{
-			"pipelineRef": map[string]interface{}{
-				"name": PipelineName,
-			},
-			"params": []interface{}{
-				map[string]interface{}{"name": "containerImage", "value": image},
-				map[string]interface{}{"name": "fetchCommand", "value": sb.Spec.Stages.Fetch.Command},
-				map[string]interface{}{"name": "prebuildCommand", "value": sb.Spec.Stages.Prebuild.Command},
-				map[string]interface{}{"name": "buildCommand", "value": sb.Spec.Stages.Build.Command},
-				map[string]interface{}{"name": "postbuildCommand", "value": sb.Spec.Stages.Postbuild.Command},
-				map[string]interface{}{"name": "deployCommand", "value": sb.Spec.Stages.Deploy.Command},
-			},
+	envVars := buildEnvVars(bj)
+
+	tasks := make([]interface{}, 0, len(bj.Spec.Stages))
+	var prevStage string
+	for _, stage := range bj.Spec.Stages {
+		stageImage := image
+		if stage.Image != "" {
+			stageImage = stage.Image
+		}
+		task := buildTaskSpec(stage.Name, stageImage, stage.Command, envVars, prevStage)
+		tasks = append(tasks, task)
+		prevStage = stage.Name
+	}
+
+	spec := map[string]interface{}{
+		"pipelineSpec": map[string]interface{}{
 			"workspaces": []interface{}{
-				map[string]interface{}{
-					"name": "shared-workspace",
-					"volumeClaimTemplate": map[string]interface{}{
-						"spec": map[string]interface{}{
-							"accessModes": []interface{}{"ReadWriteOnce"},
-							"resources": map[string]interface{}{
-								"requests": map[string]interface{}{
-									"storage": "1Gi",
-								},
+				map[string]interface{}{"name": "shared-workspace"},
+			},
+			"tasks": tasks,
+		},
+		"workspaces": []interface{}{
+			map[string]interface{}{
+				"name": "shared-workspace",
+				"volumeClaimTemplate": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"accessModes": []interface{}{"ReadWriteOnce"},
+						"resources": map[string]interface{}{
+							"requests": map[string]interface{}{
+								"storage": "1Gi",
 							},
 						},
 					},
@@ -77,5 +77,84 @@ func BuildPipelineRun(sb *buildv1alpha1.SoftwareBuild) *unstructured.Unstructure
 		},
 	}
 
+	if bj.Spec.Timeout != nil {
+		spec["timeouts"] = map[string]interface{}{
+			"pipeline": bj.Spec.Timeout.Duration.String(),
+		}
+	}
+
+	if bj.Spec.Toolchain.ServiceAccountName != "" {
+		spec["taskRunTemplate"] = map[string]interface{}{
+			"serviceAccountName": bj.Spec.Toolchain.ServiceAccountName,
+		}
+	}
+
+	obj := map[string]interface{}{
+		"apiVersion": TektonAPIVersion,
+		"kind":       PipelineRunKind,
+		"metadata": map[string]interface{}{
+			"name":      prName,
+			"namespace": bj.Namespace,
+			"labels":    labels,
+		},
+		"spec": spec,
+	}
+
 	return &unstructured.Unstructured{Object: obj}
+}
+
+func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter string) map[string]interface{} {
+	allowPrivEsc := false
+	task := map[string]interface{}{
+		"name": name,
+		"taskSpec": map[string]interface{}{
+			"workspaces": []interface{}{
+				map[string]interface{}{"name": "ws"},
+			},
+			"steps": []interface{}{
+				map[string]interface{}{
+					"name":  "run",
+					"image": image,
+					"env":   envVars,
+					"securityContext": map[string]interface{}{
+						"allowPrivilegeEscalation": allowPrivEsc,
+					},
+					"script": fmt.Sprintf("#!/usr/bin/env bash\nset -euo pipefail\ncd $(workspaces.ws.path)\nbash -lc %s\n", shellQuote(command)),
+				},
+			},
+		},
+		"workspaces": []interface{}{
+			map[string]interface{}{
+				"name":      "ws",
+				"workspace": "shared-workspace",
+			},
+		},
+	}
+	if runAfter != "" {
+		task["runAfter"] = []interface{}{runAfter}
+	}
+	return task
+}
+
+func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {
+	vars := []interface{}{
+		map[string]interface{}{"name": "BOB_NAME", "value": bj.Name},
+	}
+	if bj.Spec.Target.Board != "" {
+		vars = append(vars, map[string]interface{}{"name": "BOB_BOARD", "value": bj.Spec.Target.Board})
+	}
+	if bj.Spec.Target.Platform != "" {
+		vars = append(vars, map[string]interface{}{"name": "BOB_PLATFORM", "value": bj.Spec.Target.Platform})
+	}
+	if bj.Spec.Target.Architecture != "" {
+		vars = append(vars, map[string]interface{}{"name": "BOB_ARCH", "value": bj.Spec.Target.Architecture})
+	}
+	if bj.Spec.Target.Variant != "" {
+		vars = append(vars, map[string]interface{}{"name": "BOB_VARIANT", "value": bj.Spec.Target.Variant})
+	}
+	return vars
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }

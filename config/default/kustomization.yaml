@@ -1,4 +1,7 @@
 resources:
-  - ../crd/bases/build.mycompany.io_softwarebuilds.yaml
+  - ../crd/bases/builder.sdv.cloud.redhat.com_buildjobs.yaml
+  - ../crd/bases/builder.sdv.cloud.redhat.com_toolchains.yaml
+  - ../crd/bases/builder.sdv.cloud.redhat.com_caches.yaml
+  - ../crd/bases/builder.sdv.cloud.redhat.com_buildconfigs.yaml
   - ../rbac/role.yaml
   - ../manager/manager.yaml

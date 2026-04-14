@@ -1,10 +1,10 @@
-apiVersion: build.mycompany.io/v1alpha1
-kind: SoftwareBuild
+apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
+kind: BuildJob
 metadata:
   name: git-fetch-example
-  namespace: hello-demo
+  namespace: bob-builds
 spec:
-  runtime:
+  toolchain:
     image: ubuntu:24.04
   source:
     type: git
@@ -14,16 +14,12 @@ spec:
       credentialsSecretRef:
         name: github-creds
   stages:
-    fetch:
-      command: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git && git clone https://github.com/example/repo.git fetched/repo
-    prebuild:
-      command: mkdir -p generated bin output && cp fetched/repo/main.cpp generated/main.cpp
-    build:
-      command: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ && g++ generated/main.cpp -o bin/app
-    postbuild:
-      command: ./bin/app > output/output.txt
-    deploy:
-      command: mkdir -p /host-build/deployment/{generated,bin,output} && cp generated/main.cpp /host-build/deployment/generated/ && cp bin/app /host-build/deployment/bin/ && cp output/output.txt /host-build/deployment/output/
-  destination:
-    type: sharedFolder
-    path: /host-build/deployment
+    - name: fetch
+      command: "apt-get update && apt-get install -y git && git clone https://github.com/example/repo.git /workspace/src"
+    - name: build
+      command: "apt-get update && apt-get install -y g++ && g++ /workspace/src/main.cpp -o /workspace/bin/app"
+    - name: test
+      command: "/workspace/bin/app"
+  artifacts:
+    destination: pvc
+    path: /workspace/bin

@@ -20,7 +20,7 @@ import (
 	"os"
 	"testing"
 
-	buildv1alpha1 "github.com/example/builder-operator/api/v1alpha1"
+	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,9 +38,6 @@ var (
 	cancelMgr  context.CancelFunc
 )
 
-// TestMain sets up envtest when KUBEBUILDER_ASSETS is provided, allowing
-// integration tests to run alongside unit tests. Without that variable, only
-// unit tests execute and integration tests are skipped.
 func TestMain(m *testing.M) {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
@@ -94,7 +91,7 @@ func setupEnvtest() {
 		panic(fmt.Sprintf("failed to create manager: %v", err))
 	}
 
-	if err := (&SoftwareBuildReconciler{
+	if err := (&BuildJobReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
@@ -110,8 +107,6 @@ func setupEnvtest() {
 	}()
 }
 
-// minimalPipelineRunCRD returns a bare-bones CRD for tekton.dev/v1 PipelineRun
-// so the API server accepts Create calls from the controller during tests.
 func minimalPipelineRunCRD() *apiextensionsv1.CustomResourceDefinition {
 	trueVal := true
 	return &apiextensionsv1.CustomResourceDefinition{

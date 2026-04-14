@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"time"
 
-	buildv1alpha1 "github.com/example/builder-operator/api/v1alpha1"
-	"github.com/example/builder-operator/internal/tekton"
+	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
+	"github.com/centos-automotive-suite/bob/internal/tekton"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,37 +37,36 @@ var pipelineRunGVK = schema.GroupVersionKind{
 	Kind:    "PipelineRun",
 }
 
-// SoftwareBuildReconciler reconciles a SoftwareBuild object.
-type SoftwareBuildReconciler struct {
+type BuildJobReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-func (r *SoftwareBuildReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	var sb buildv1alpha1.SoftwareBuild
-	if err := r.Get(ctx, req.NamespacedName, &sb); err != nil {
+	var bj buildv1alpha1.BuildJob
+	if err := r.Get(ctx, req.NamespacedName, &bj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if sb.Status.CurrentPipelineRun == "" {
-		pipelineRun := tekton.BuildPipelineRun(&sb)
-		if err := ctrl.SetControllerReference(&sb, pipelineRun, r.Scheme); err != nil {
-			return ctrl.Result{}, err
+	if bj.Status.CurrentPipelineRun == "" {
+		pipelineRun := tekton.BuildPipelineRun(&bj)
+		if err := ctrl.SetControllerReference(&bj, pipelineRun, r.Scheme); err != nil {
+			return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
 		}
 		if err := r.Create(ctx, pipelineRun); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("creating PipelineRun: %w", err)
 		}
 
-		sb.Status.CurrentPipelineRun = pipelineRun.GetName()
-		sb.Status.Phase = buildv1alpha1.PhasePending
-		sb.Status.Conditions = mergeCondition(
-			sb.Status.Conditions,
-			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunCreated", "PipelineRun created for SoftwareBuild", sb.Generation),
+		bj.Status.CurrentPipelineRun = pipelineRun.GetName()
+		bj.Status.Phase = buildv1alpha1.PhasePending
+		bj.Status.Conditions = mergeCondition(
+			bj.Status.Conditions,
+			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunCreated", "PipelineRun created for BuildJob", bj.Generation),
 		)
-		if err := r.Status().Update(ctx, &sb); err != nil {
-			return ctrl.Result{}, err
+		if err := r.Status().Update(ctx, &bj); err != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status after PipelineRun creation: %w", err)
 		}
 		logger.Info("created PipelineRun", "name", pipelineRun.GetName())
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -75,33 +74,35 @@ func (r *SoftwareBuildReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	var pr unstructured.Unstructured
 	pr.SetGroupVersionKind(pipelineRunGVK)
-	if err := r.Get(ctx, client.ObjectKey{Namespace: sb.Namespace, Name: sb.Status.CurrentPipelineRun}, &pr); err != nil {
+	if err := r.Get(ctx, client.ObjectKey{Namespace: bj.Namespace, Name: bj.Status.CurrentPipelineRun}, &pr); err != nil {
 		if apierrors.IsNotFound(err) {
-			sb.Status.Phase = buildv1alpha1.PhaseFailed
-			sb.Status.FailureReason = "PipelineRunNotFound"
-			sb.Status.Conditions = mergeCondition(
-				sb.Status.Conditions,
-				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunMissing", "Referenced PipelineRun no longer exists", sb.Generation),
+			bj.Status.Phase = buildv1alpha1.PhaseFailed
+			bj.Status.FailureReason = "PipelineRunNotFound"
+			bj.Status.Conditions = mergeCondition(
+				bj.Status.Conditions,
+				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunMissing", "Referenced PipelineRun no longer exists", bj.Generation),
 			)
-			_ = r.Status().Update(ctx, &sb)
+			if err := r.Status().Update(ctx, &bj); err != nil {
+				return ctrl.Result{}, fmt.Errorf("updating status for missing PipelineRun: %w", err)
+			}
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("fetching PipelineRun %q: %w", bj.Status.CurrentPipelineRun, err)
 	}
 
-	r.syncStatusFromPipelineRun(&sb, &pr)
-	if err := r.Status().Update(ctx, &sb); err != nil {
-		return ctrl.Result{}, err
+	r.syncStatusFromPipelineRun(&bj, &pr)
+	if err := r.Status().Update(ctx, &bj); err != nil {
+		return ctrl.Result{}, fmt.Errorf("updating status from PipelineRun: %w", err)
 	}
 
-	if sb.Status.Phase == buildv1alpha1.PhaseRunning || sb.Status.Phase == buildv1alpha1.PhasePending {
+	if bj.Status.Phase == buildv1alpha1.PhaseRunning || bj.Status.Phase == buildv1alpha1.PhasePending {
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *SoftwareBuildReconciler) syncStatusFromPipelineRun(sb *buildv1alpha1.SoftwareBuild, pr *unstructured.Unstructured) {
+func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJob, pr *unstructured.Unstructured) {
 	conditions, _, _ := unstructured.NestedSlice(pr.Object, "status", "conditions")
 	phase := buildv1alpha1.PhaseRunning
 	readyStatus := metav1.ConditionFalse
@@ -129,15 +130,23 @@ func (r *SoftwareBuildReconciler) syncStatusFromPipelineRun(sb *buildv1alpha1.So
 				readyStatus = metav1.ConditionFalse
 				reason = rn
 				message = msg
-				sb.Status.FailureReason = rn
+				bj.Status.FailureReason = rn
 			default:
 				phase = buildv1alpha1.PhaseRunning
 			}
 		}
 	}
 
-	sb.Status.Phase = phase
-	sb.Status.Conditions = mergeCondition(sb.Status.Conditions, buildv1alpha1.NewCondition("Ready", readyStatus, reason, message, sb.Generation))
+	// Distinguish Pending from Running by checking if startTime exists
+	if phase == buildv1alpha1.PhaseRunning {
+		_, found, _ := unstructured.NestedString(pr.Object, "status", "startTime")
+		if !found {
+			phase = buildv1alpha1.PhasePending
+		}
+	}
+
+	bj.Status.Phase = phase
+	bj.Status.Conditions = mergeCondition(bj.Status.Conditions, buildv1alpha1.NewCondition("Ready", readyStatus, reason, message, bj.Generation))
 
 	childRefs, _, _ := unstructured.NestedSlice(pr.Object, "status", "childReferences")
 	stageStatuses := make([]buildv1alpha1.StageStatus, 0, len(childRefs))
@@ -154,31 +163,25 @@ func (r *SoftwareBuildReconciler) syncStatusFromPipelineRun(sb *buildv1alpha1.So
 			Message: fmt.Sprintf("TaskRun: %s", name),
 		})
 	}
-	sb.Status.Stages = stageStatuses
+	bj.Status.Stages = stageStatuses
 
-	if sb.Spec.Destination.Path != "" {
-		sb.Status.ArtifactURI = sb.Spec.Destination.Path
+	if bj.Spec.Artifacts.Path != "" {
+		bj.Status.ArtifactURI = bj.Spec.Artifacts.Path
 	}
 }
 
 func mergeCondition(conditions []metav1.Condition, newCondition metav1.Condition) []metav1.Condition {
-	updated := false
 	for i := range conditions {
 		if conditions[i].Type == newCondition.Type {
 			conditions[i] = newCondition
-			updated = true
-			break
+			return conditions
 		}
 	}
-	if !updated {
-		conditions = append(conditions, newCondition)
-	}
-	return conditions
+	return append(conditions, newCondition)
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *SoftwareBuildReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *BuildJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&buildv1alpha1.SoftwareBuild{}).
+		For(&buildv1alpha1.BuildJob{}).
 		Complete(r)
 }

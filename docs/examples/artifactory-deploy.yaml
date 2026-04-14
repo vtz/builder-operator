@@ -1,29 +1,27 @@
-apiVersion: build.mycompany.io/v1alpha1
-kind: SoftwareBuild
+apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
+kind: BuildJob
 metadata:
   name: artifactory-deploy-example
-  namespace: hello-demo
+  namespace: bob-builds
 spec:
-  runtime:
+  toolchain:
     image: ubuntu:24.04
   source:
     type: git
     git:
-      url: https://github.com/example/repo.git
-      revision: main
+      url: https://github.com/example/firmware.git
+      revision: release/v1.0
+  target:
+    board: custom-board
+    platform: cmake
+    architecture: arm
   stages:
-    fetch:
-      command: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git && git clone https://github.com/example/repo.git fetched/repo
-    prebuild:
-      command: mkdir -p generated dist && cp fetched/repo/main.cpp generated/main.cpp
-    build:
-      command: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y g++ && g++ generated/main.cpp -o dist/app
-    postbuild:
-      command: tar -czf dist/app.tar.gz -C dist app
-    deploy:
-      command: echo "Upload dist/app.tar.gz to artifactory using injected credentials"
-  destination:
-    type: artifactory
-    repository: https://artifactory.example.com/artifactory/my-repo
-    credentialsSecretRef:
-      name: artifactory-creds
+    - name: fetch
+      command: "git clone --depth 1 https://github.com/example/firmware.git /workspace/src"
+    - name: build
+      command: "cd /workspace/src && cmake -B build && cmake --build build"
+    - name: package
+      command: "cp /workspace/src/build/firmware.bin /workspace/artifacts/"
+  artifacts:
+    destination: oci
+    path: /workspace/artifacts

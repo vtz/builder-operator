@@ -26,8 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	buildv1alpha1 "github.com/example/builder-operator/api/v1alpha1"
-	"github.com/example/builder-operator/internal/controller"
+	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
+	"github.com/centos-automotive-suite/bob/internal/buildapi"
+	"github.com/centos-automotive-suite/bob/internal/controller"
 )
 
 var (
@@ -42,9 +43,11 @@ func init() {
 func main() {
 	var metricsAddr string
 	var probeAddr string
+	var apiAddr string
 	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&apiAddr, "api-bind-address", ":8082", "The address the Build API binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -59,16 +62,23 @@ func main() {
 		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "builder-operator.build.mycompany.io",
+		LeaderElectionID:       "bob.builder.sdv.cloud.redhat.com",
 	})
 	if err != nil {
 		os.Exit(1)
 	}
 
-	if err := (&controller.SoftwareBuildReconciler{
+	if err := (&controller.BuildJobReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
+		os.Exit(1)
+	}
+
+	// Start the Build API server as a manager Runnable so it shares
+	// the manager's lifecycle and client cache.
+	apiServer := buildapi.NewServer(mgr.GetClient(), apiAddr)
+	if err := mgr.Add(apiServer); err != nil {
 		os.Exit(1)
 	}
 

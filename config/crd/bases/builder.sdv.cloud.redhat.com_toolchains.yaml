@@ -1,0 +1,94 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: toolchains.builder.sdv.cloud.redhat.com
+spec:
+  group: builder.sdv.cloud.redhat.com
+  names:
+    kind: Toolchain
+    listKind: ToolchainList
+    plural: toolchains
+    singular: toolchain
+    shortNames:
+      - tc
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Image
+          type: string
+          jsonPath: .spec.image
+        - name: Platform
+          type: string
+          jsonPath: .spec.platform
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  minLength: 1
+                platform:
+                  type: string
+                description:
+                  type: string
+                supportedBoards:
+                  type: array
+                  items:
+                    type: string
+                supportedArchitectures:
+                  type: array
+                  items:
+                    type: string
+                qualification:
+                  type: object
+                  properties:
+                    toolImpact:
+                      type: string
+                      enum: [TI1, TI2]
+                    toolConfidenceLevel:
+                      type: string
+                      enum: [TCL1, TCL2, TCL3, TCL4]
+                    evidenceRef:
+                      type: string
+                    qualifiedForASIL:
+                      type: string
+                      enum: [QM, A, B, C, D]
+            status:
+              type: object
+              properties:
+                resolvedDigest:
+                  type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status, lastTransitionTime, reason, message]
+                    properties:
+                      type: { type: string }
+                      status: { type: string }
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason: { type: string }
+                      message: { type: string }
+                      observedGeneration:
+                        type: integer
+                        format: int64
+      subresources:
+        status: {}

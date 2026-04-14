@@ -1,14 +1,30 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: builder-operator-manager-role
+  name: bob-manager-role
 rules:
-  - apiGroups: ["build.mycompany.io"]
-    resources: ["softwarebuilds", "softwarebuilds/status", "softwarebuilds/finalizers"]
+  - apiGroups: ["builder.sdv.cloud.redhat.com"]
+    resources:
+      - buildjobs
+      - buildjobs/status
+      - buildjobs/finalizers
+      - toolchains
+      - toolchains/status
+      - caches
+      - caches/status
+      - buildconfigs
+      - buildconfigs/status
     verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: ["tekton.dev"]
     resources: ["pipelineruns"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
-    resources: ["events", "secrets"]
-    verbs: ["get", "list", "watch", "create", "patch"]
+    resources: ["events", "secrets", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  # Leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
