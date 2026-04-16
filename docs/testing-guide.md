@@ -115,7 +115,12 @@ If you see `body-ecu-nucleo` in the list, skip to Step 3.
 ### Step 2: Create the BuildJob (one-time, needs `oc`)
 
 If the BuildJob doesn't exist yet, someone with cluster access needs to
-create it once. This is typically done by the person who deployed bob:
+create it once. This is typically done by the person who deployed bob.
+
+If the deploy script was run with `--bootstrap=all`, the BuildJobs are
+already created and you can skip this step.
+
+Otherwise:
 
 ```bash
 oc apply -f docs/examples/zephyr-nucleo-cross.yaml
@@ -177,9 +182,9 @@ This downloads the firmware binaries to `./out/`:
 
 ## 4. Try other examples
 
-These need someone with `oc` access to create the BuildJobs first (or ask
-the person who deployed bob to do it). Once created, anyone can trigger
-builds with `bob`.
+These need someone with `oc` access to create the BuildJobs first, or use
+the deploy script with `--bootstrap=all` to pre-load everything. Once
+created, anyone can trigger builds with `bob`.
 
 ### Zephyr Hello World (native simulation -- no hardware needed)
 
@@ -241,3 +246,39 @@ to check:
 ```bash
 oc get pipelineruns -n bob-builds
 ```
+
+---
+
+## 7. For deployers — Setting up bob on a new cluster
+
+If you're the one deploying bob, use the deploy script:
+
+```bash
+# Full deploy with all example builds pre-loaded
+./hack/deploy-openshift.sh --bootstrap=all
+
+# Deploy with specific examples only
+./hack/deploy-openshift.sh --bootstrap=zephyr-nucleo-cross,zephyr-hello-world
+
+# Deploy without any example CRs
+./hack/deploy-openshift.sh
+
+# See available example CRs
+./hack/deploy-openshift.sh --list-examples
+
+# Re-deploy with existing image (skip build/push)
+./hack/deploy-openshift.sh --skip-build --bootstrap=all
+```
+
+The script handles:
+- Prerequisite checks (oc login, Tekton)
+- Namespace creation (`bob-system`, `bob-builds`)
+- Internal registry route exposure (auto)
+- Image build and push
+- CRD and RBAC installation
+- Operator deployment with proper resource limits and artifact storage
+- Service + Route for the Build API
+- Optional bootstrapping of example BuildJob CRs
+
+After deploying, share the `BOB_SERVER` URL with colleagues. They only
+need the URL and the `bob` binary — no cluster access required.
