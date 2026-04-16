@@ -23,14 +23,23 @@ spec:
           args:
             - --leader-elect
             - --api-bind-address=:8082
+            - --cli-dir=/cli
+            - --artifacts-dir=/data/artifacts
           ports:
             - name: api
               containerPort: 8082
               protocol: TCP
+          volumeMounts:
+            - name: artifacts
+              mountPath: /data/artifacts
           resources:
             limits:
               cpu: 500m
-              memory: 256Mi
+              memory: 512Mi
             requests:
-              cpu: 100m
+              cpu: 10m
               memory: 128Mi
+      volumes:
+        - name: artifacts
+          emptyDir:
+            sizeLimit: 1Gi
