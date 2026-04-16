@@ -1,0 +1,18 @@
+apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
+kind: Toolchain
+metadata:
+  name: openbsw-toolchain
+  namespace: bob-builds
+spec:
+  image: image-registry.openshift-image-registry.svc:5000/bob-builds/openbsw-toolchain:latest
+  build:
+    dockerfile: |
+      FROM ubuntu:24.04
+      RUN apt-get update && apt-get install -y --no-install-recommends \
+          git cmake ninja-build g++ python3 make ca-certificates \
+          && rm -rf /var/lib/apt/lists/*
+  platform: openbsw
+  description: "OpenBSW build toolchain — cmake 3.28, ninja 1.11, g++ 13, python3"
+  supportedArchitectures:
+    - x86
+    - arm

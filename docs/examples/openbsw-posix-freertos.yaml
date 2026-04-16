@@ -5,7 +5,8 @@ metadata:
   namespace: bob-builds
 spec:
   toolchain:
-    image: buildpack-deps:noble
+    # Built by Toolchain CR "openbsw-toolchain" — has cmake, ninja, g++, python3 pre-installed.
+    image: image-registry.openshift-image-registry.svc:5000/bob-builds/openbsw-toolchain:latest
   source:
     type: git
     git:
@@ -16,15 +17,9 @@ spec:
     architecture: x86
   stages:
     - name: configure
-      command: >-
-        apt-get update -qq &&
-        apt-get install -y --no-install-recommends cmake ninja-build g++ python3 &&
-        cd source && cmake --preset posix-freertos
+      command: "cd source && cmake --preset posix-freertos"
     - name: build
-      command: >-
-        apt-get update -qq &&
-        apt-get install -y --no-install-recommends cmake ninja-build g++ &&
-        cd source && cmake --build --preset posix-freertos
+      command: "cd source && cmake --build --preset posix-freertos"
     - name: package
       command: >-
         mkdir -p /workspace/artifacts &&

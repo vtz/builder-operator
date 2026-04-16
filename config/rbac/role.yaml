@@ -10,13 +10,14 @@ rules:
       - buildjobs/finalizers
       - toolchains
       - toolchains/status
+      - toolchains/finalizers
       - caches
       - caches/status
       - buildconfigs
       - buildconfigs/status
     verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: ["tekton.dev"]
-    resources: ["pipelineruns"]
+    resources: ["pipelineruns", "taskruns"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["events", "secrets", "persistentvolumeclaims"]

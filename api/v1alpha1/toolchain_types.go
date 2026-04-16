@@ -32,9 +32,26 @@ type ToolQualification struct {
 	QualifiedForASIL string `json:"qualifiedForASIL,omitempty"`
 }
 
+type ToolchainBuildSpec struct {
+	// Inline Dockerfile content. Mutually exclusive with ContextGit.
+	// +optional
+	Dockerfile string `json:"dockerfile,omitempty"`
+	// Build from a Dockerfile in a git repository.
+	// +optional
+	ContextGit *GitSource `json:"contextGit,omitempty"`
+	// Path to the Dockerfile within the git context (default: "Dockerfile").
+	// +optional
+	// +kubebuilder:default="Dockerfile"
+	DockerfilePath string `json:"dockerfilePath,omitempty"`
+}
+
 type ToolchainCRSpec struct {
+	// The image reference. If build is specified, this is the push destination.
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
+	// If specified, bob will build the toolchain image on-cluster.
+	// +optional
+	Build *ToolchainBuildSpec `json:"build,omitempty"`
 	// +optional
 	Platform string `json:"platform,omitempty"`
 	// +optional
@@ -47,9 +64,23 @@ type ToolchainCRSpec struct {
 	Qualification *ToolQualification `json:"qualification,omitempty"`
 }
 
+type ToolchainPhase string
+
+const (
+	ToolchainPhaseReady    ToolchainPhase = "Ready"
+	ToolchainPhaseBuilding ToolchainPhase = "Building"
+	ToolchainPhaseFailed   ToolchainPhase = "Failed"
+)
+
 type ToolchainCRStatus struct {
 	// +optional
+	Phase ToolchainPhase `json:"phase,omitempty"`
+	// +optional
 	ResolvedDigest string `json:"resolvedDigest,omitempty"`
+	// +optional
+	CurrentBuildRun string `json:"currentBuildRun,omitempty"`
+	// +optional
+	LastBuildTime string `json:"lastBuildTime,omitempty"`
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

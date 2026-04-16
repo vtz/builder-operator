@@ -219,7 +219,91 @@ to use environment variables.
 
 ---
 
-## 6. Troubleshooting
+## 6. Toolchain images — why they matter
+
+Bob's first design principle: **the container IS the toolchain.** Each build
+stage runs in a separate Tekton Task (= separate Pod), so anything you
+`apt-get install` in one stage is gone by the next. The workspace PVC persists
+files on disk, but system-level packages (`/usr/bin/cmake`, etc.) live in the
+container filesystem and are wiped between stages.
+
+**Don't install build tools at runtime.** Use a toolchain image that already
+has everything.
+
+### Good: toolchain image has all the tools
+
+```yaml
+spec:
+  toolchain:
+    image: ghcr.io/zephyrproject-rtos/ci-base:v0.29.1  # cmake, ninja, python, west, SDK — all pre-installed
+  stages:
+    - name: fetch
+      command: "west init -l source && west update"
+    - name: build
+      command: "west build -b ${BOB_BOARD} source/app"   # cmake is available — it's in the image
+```
+
+### Bad: installing deps at runtime (fragile, slow, not reproducible)
+
+```yaml
+spec:
+  toolchain:
+    image: ubuntu:24.04      # bare image — has nothing
+  stages:
+    - name: deps
+      command: "apt-get update && apt-get install -y cmake ninja-build"
+    - name: build
+      command: "cmake --build ."   # FAILS — cmake is gone (different container)
+```
+
+### Building a custom toolchain image
+
+If no public image has what you need, create one. Example for OpenBSW:
+
+```dockerfile
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake ninja-build g++ python3 make \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+Build, push, and reference it:
+
+```bash
+podman build -t quay.io/myorg/openbsw-toolchain:latest -f Dockerfile.toolchain .
+podman push quay.io/myorg/openbsw-toolchain:latest
+```
+
+```yaml
+spec:
+  toolchain:
+    image: quay.io/myorg/openbsw-toolchain:latest
+  stages:
+    - name: configure
+      command: "cd source && cmake --preset posix-freertos"     # cmake is there
+    - name: build
+      command: "cd source && cmake --build --preset posix-freertos"  # still there
+```
+
+### Why not merge stages into one container?
+
+You might wonder: why not run all stages in the same container so deps persist?
+
+Because each stage being a separate Task means:
+
+- **Tekton Chains** generates per-Task attestations for SLSA provenance
+- **Enterprise Contract** policies can verify each stage independently
+- **Security contexts** can differ per stage (e.g., network for fetch, no network for build)
+- **Retries and timeouts** work per stage
+
+These properties are essential for Red Hat's Trusted Software Supply Chain
+Framework (TSSF) and SLSA compliance. The toolchain image is the right
+abstraction: it makes deps a build-time concern (image layer), not a
+runtime concern (shell commands).
+
+---
+
+## 7. Troubleshooting
 
 ### "BOB_SERVER is required"
 
@@ -249,7 +333,7 @@ oc get pipelineruns -n bob-builds
 
 ---
 
-## 7. For deployers — Setting up bob on a new cluster
+## 8. For deployers — Setting up bob on a new cluster
 
 If you're the one deploying bob, use the deploy script:
 

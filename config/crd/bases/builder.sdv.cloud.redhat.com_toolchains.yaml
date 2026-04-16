@@ -20,6 +20,9 @@ spec:
         - name: Image
           type: string
           jsonPath: .spec.image
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
         - name: Platform
           type: string
           jsonPath: .spec.platform
@@ -43,6 +46,29 @@ spec:
                 image:
                   type: string
                   minLength: 1
+                build:
+                  type: object
+                  description: If specified, bob builds the toolchain image on-cluster.
+                  properties:
+                    dockerfile:
+                      type: string
+                      description: Inline Dockerfile content.
+                    contextGit:
+                      type: object
+                      properties:
+                        url:
+                          type: string
+                        revision:
+                          type: string
+                          default: main
+                        credentialsSecretRef:
+                          type: object
+                          properties:
+                            name: { type: string }
+                            key: { type: string }
+                    dockerfilePath:
+                      type: string
+                      default: Dockerfile
                 platform:
                   type: string
                 description:
@@ -72,7 +98,14 @@ spec:
             status:
               type: object
               properties:
+                phase:
+                  type: string
+                  enum: [Ready, Building, Failed]
                 resolvedDigest:
+                  type: string
+                currentBuildRun:
+                  type: string
+                lastBuildTime:
                   type: string
                 conditions:
                   type: array

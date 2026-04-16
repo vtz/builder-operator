@@ -83,6 +83,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := (&controller.ToolchainReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Toolchain")
+		os.Exit(1)
+	}
+
 	apiServer := buildapi.NewServer(mgr.GetClient(), apiAddr, cliDir, artifactsDir, cfg)
 	if err := mgr.Add(apiServer); err != nil {
 		setupLog.Error(err, "unable to add API server")
