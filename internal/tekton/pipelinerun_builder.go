@@ -69,6 +69,43 @@ func BuildPipelineRunN(bj *buildv1alpha1.BuildJob, runN int64) *unstructured.Uns
 		prevStage = stage.Name
 	}
 
+	if bj.Spec.Artifacts.Path != "" {
+		uploadScript := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+cd $(workspaces.ws.path)
+ARTIFACTS_DIR=%q
+if [ ! -d "$ARTIFACTS_DIR" ] || [ -z "$(ls -A "$ARTIFACTS_DIR" 2>/dev/null)" ]; then
+  echo "No artifacts to upload"
+  exit 0
+fi
+python3 -c "
+import http.client, tarfile, io, os, sys
+d = os.environ['ARTIFACTS_DIR']
+buf = io.BytesIO()
+with tarfile.open(fileobj=buf, mode='w:gz') as t:
+    for f in os.listdir(d):
+        t.add(os.path.join(d, f), arcname=f)
+data = buf.getvalue()
+conn = http.client.HTTPConnection(os.environ['BOB_API_HOST'], int(os.environ['BOB_API_PORT']))
+conn.request('POST',
+    '/v1/namespaces/' + os.environ['BOB_NAMESPACE'] + '/buildjobs/' + os.environ['BOB_NAME'] + '/artifacts/upload',
+    body=data, headers={'Content-Type': 'application/gzip'})
+r = conn.getresponse()
+print('Artifact upload: ' + str(r.status) + ' (' + str(len(data)) + ' bytes)')
+if r.status >= 400:
+    print(r.read().decode())
+    sys.exit(1)
+"`, bj.Spec.Artifacts.Path)
+
+		collectEnv := append(envVars,
+			map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
+			map[string]interface{}{"name": "BOB_API_HOST", "value": "bob-api.bob-system.svc"},
+			map[string]interface{}{"name": "BOB_API_PORT", "value": "8082"},
+		)
+		collectTask := buildCollectTask(image, uploadScript, collectEnv, prevStage)
+		tasks = append(tasks, collectTask)
+	}
+
 	pipelineWorkspaces := []interface{}{
 		map[string]interface{}{"name": "shared-workspace"},
 	}
@@ -189,9 +226,37 @@ func SharedCachePVCName() string {
 	return "bob-cache"
 }
 
+func buildCollectTask(image, script string, envVars []interface{}, runAfter string) map[string]interface{} {
+	allowPrivEsc := false
+	return map[string]interface{}{
+		"name": "collect-artifacts",
+		"taskSpec": map[string]interface{}{
+			"workspaces": []interface{}{
+				map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+			},
+			"steps": []interface{}{
+				map[string]interface{}{
+					"name":  "upload",
+					"image": image,
+					"env":   envVars,
+					"securityContext": map[string]interface{}{
+						"allowPrivilegeEscalation": allowPrivEsc,
+					},
+					"script": script,
+				},
+			},
+		},
+		"runAfter": []interface{}{runAfter},
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+		},
+	}
+}
+
 func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {
 	vars := []interface{}{
 		map[string]interface{}{"name": "BOB_NAME", "value": bj.Name},
+		map[string]interface{}{"name": "BOB_NAMESPACE", "value": bj.Namespace},
 	}
 	if bj.Spec.Target.Board != "" {
 		vars = append(vars, map[string]interface{}{"name": "BOB_BOARD", "value": bj.Spec.Target.Board})

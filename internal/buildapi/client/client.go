@@ -136,6 +136,39 @@ func (c *Client) Logs(ctx context.Context, name string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
+func (c *Client) ListArtifacts(ctx context.Context, name string) (*buildapi.ArtifactListResponse, error) {
+	url := fmt.Sprintf("%s/v1/namespaces/%s/buildjobs/%s/artifacts", c.BaseURL, c.Namespace, name)
+	body, err := c.doGet(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	var resp buildapi.ArtifactListResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &resp, nil
+}
+
+func (c *Client) DownloadArtifact(ctx context.Context, name, filename string) (io.ReadCloser, error) {
+	url := fmt.Sprintf("%s/v1/namespaces/%s/buildjobs/%s/artifacts/%s", c.BaseURL, c.Namespace, name, filename)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	c.setAuth(req)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(body))
+	}
+	return resp.Body, nil
+}
+
 func (c *Client) doGet(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

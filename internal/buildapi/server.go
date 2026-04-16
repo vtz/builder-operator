@@ -15,6 +15,8 @@
 package buildapi
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
@@ -32,13 +35,14 @@ import (
 )
 
 type Server struct {
-	Client client.Client
-	Addr   string
-	CLIDir string
+	Client       client.Client
+	Addr         string
+	CLIDir       string
+	ArtifactsDir string
 }
 
-func NewServer(c client.Client, addr, cliDir string) *Server {
-	return &Server{Client: c, Addr: addr, CLIDir: cliDir}
+func NewServer(c client.Client, addr, cliDir, artifactsDir string) *Server {
+	return &Server{Client: c, Addr: addr, CLIDir: cliDir, ArtifactsDir: artifactsDir}
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -50,6 +54,9 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}", s.handleGet)
 	mux.HandleFunc("POST /v1/namespaces/{namespace}/buildjobs/{name}/run", s.handleRun)
 	mux.HandleFunc("DELETE /v1/namespaces/{namespace}/buildjobs/{name}", s.handleDelete)
+	mux.HandleFunc("POST /v1/namespaces/{namespace}/buildjobs/{name}/artifacts/upload", s.handleArtifactUpload)
+	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/artifacts", s.handleArtifactList)
+	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/artifacts/{filename}", s.handleArtifactDownload)
 	mux.HandleFunc("GET /v1/cli/{os}/{arch}", s.handleCLIDownload)
 	mux.HandleFunc("GET /v1/cli", s.handleCLIList)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -273,6 +280,115 @@ func (s *Server) handleCLIList(w http.ResponseWriter, r *http.Request) {
 		"platforms": platforms,
 		"usage":     "curl -Lo bob https://<bob-server>/v1/cli/<os>/<arch> && chmod +x bob",
 	})
+}
+
+func (s *Server) artifactDir(ns, name string) string {
+	return filepath.Join(s.ArtifactsDir, ns, name)
+}
+
+func (s *Server) handleArtifactUpload(w http.ResponseWriter, r *http.Request) {
+	ns := r.PathValue("namespace")
+	name := r.PathValue("name")
+
+	dir := s.artifactDir(ns, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("creating artifact dir: %v", err))
+		return
+	}
+
+	gr, err := gzip.NewReader(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid gzip: %v", err))
+		return
+	}
+	defer gr.Close()
+
+	tr := tar.NewReader(gr)
+	var count int
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid tar entry: %v", err))
+			return
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		clean := filepath.Base(hdr.Name)
+		if clean == "." || clean == ".." || strings.Contains(clean, "/") {
+			continue
+		}
+		f, err := os.Create(filepath.Join(dir, clean))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("creating file: %v", err))
+			return
+		}
+		if _, err := io.Copy(f, tr); err != nil {
+			f.Close()
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("writing file: %v", err))
+			return
+		}
+		f.Close()
+		count++
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"uploaded": count})
+}
+
+func (s *Server) handleArtifactList(w http.ResponseWriter, r *http.Request) {
+	ns := r.PathValue("namespace")
+	name := r.PathValue("name")
+
+	dir := s.artifactDir(ns, name)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, ArtifactListResponse{BuildJob: name, Namespace: ns, Files: []ArtifactFileInfo{}})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("reading artifacts: %v", err))
+		return
+	}
+
+	files := make([]ArtifactFileInfo, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, ArtifactFileInfo{Name: e.Name(), Size: info.Size()})
+	}
+	writeJSON(w, http.StatusOK, ArtifactListResponse{BuildJob: name, Namespace: ns, Files: files})
+}
+
+func (s *Server) handleArtifactDownload(w http.ResponseWriter, r *http.Request) {
+	ns := r.PathValue("namespace")
+	name := r.PathValue("name")
+	filename := r.PathValue("filename")
+
+	clean := filepath.Base(filename)
+	path := filepath.Join(s.artifactDir(ns, name), clean)
+
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("artifact %q not found", clean))
+		} else {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("opening artifact: %v", err))
+		}
+		return
+	}
+	defer f.Close()
+
+	stat, _ := f.Stat()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", clean))
+	http.ServeContent(w, r, clean, stat.ModTime(), f)
 }
 
 func toSummary(bj *buildv1alpha1.BuildJob) BuildJobSummary {

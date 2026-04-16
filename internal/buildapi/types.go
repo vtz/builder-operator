@@ -55,3 +55,14 @@ type CreateBuildJobRequest struct {
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
+
+type ArtifactFileInfo struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+type ArtifactListResponse struct {
+	BuildJob  string             `json:"buildJob"`
+	Namespace string             `json:"namespace"`
+	Files     []ArtifactFileInfo `json:"files"`
+}

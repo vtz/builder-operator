@@ -154,15 +154,21 @@ bob logs body-ecu-nucleo
 
 Streams the build output to your terminal in real time.
 
-### Step 6: Check artifacts
+### Step 6: Get the artifacts
 
-When the build succeeds:
+When the build succeeds, list available artifacts:
 
 ```bash
-bob show body-ecu-nucleo
+bob artifacts body-ecu-nucleo
 ```
 
-Look for the `Artifact URI` in the output. The artifacts are:
+Download them to your machine:
+
+```bash
+bob artifacts body-ecu-nucleo --download ./out
+```
+
+This downloads the firmware binaries to `./out/`:
 - `zephyr.bin` -- raw binary for flashing
 - `zephyr.hex` -- Intel HEX format
 - `zephyr.elf` -- ELF with debug symbols
@@ -199,6 +205,8 @@ bob logs openbsw-posix-freertos
 | `bob build <name>` | Trigger a build |
 | `bob show <name>` | Detailed status + stages |
 | `bob logs <name>` | Stream build logs |
+| `bob artifacts <name>` | List build artifacts |
+| `bob artifacts <name> -d ./out` | Download artifacts to local dir |
 | `bob delete <name>` | Delete a BuildJob |
 
 All commands accept `--server`, `-n` (namespace) as flags if you prefer not
