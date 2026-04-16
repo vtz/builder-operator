@@ -116,7 +116,7 @@ func TestSyncStatusFromPipelineRun_SetsRunning(t *testing.T) {
 	pr := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"status": map[string]interface{}{
-				"startTime": "2026-04-14T10:00:00Z",
+				"startTime":  "2026-04-14T10:00:00Z",
 				"conditions": []interface{}{},
 			},
 		},

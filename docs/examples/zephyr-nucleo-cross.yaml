@@ -5,21 +5,21 @@ metadata:
   namespace: bob-builds
 spec:
   toolchain:
-    image: ghcr.io/zephyrproject-rtos/ci-base:v0.27.4
+    image: image-registry.openshift-image-registry.svc:5000/bob-builds/body-ecu:latest
   source:
     type: git
     git:
       url: https://github.com/vtz/body-ecu
-      revision: main
+      revision: feature/openbsw-integration
   target:
-    board: nucleo_h755zi_q
+    board: nucleo_h755zi_q/stm32h755xx/m7
     platform: zephyr
     architecture: arm
   stages:
     - name: fetch
-      command: "west init -l src && west update"
+      command: "west init -l source && west update"
     - name: build
-      command: "west build -b ${BOB_BOARD} src/app"
+      command: "west build -b ${BOB_BOARD} source/app"
     - name: package
       command: >-
         mkdir -p /workspace/artifacts &&

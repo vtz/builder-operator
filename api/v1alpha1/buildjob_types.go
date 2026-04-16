@@ -111,7 +111,7 @@ type CacheMount struct {
 type BuildJobSpec struct {
 	// +optional
 	Toolchain ToolchainSpec `json:"toolchain,omitempty"`
-	Source    SourceSpec     `json:"source"`
+	Source    SourceSpec    `json:"source"`
 	// +optional
 	Target TargetSpec `json:"target,omitempty"`
 
@@ -129,7 +129,7 @@ type BuildJobSpec struct {
 
 type NamedStage struct {
 	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
+	Name      string `json:"name"`
 	StageSpec `json:",inline"`
 }
 
@@ -154,6 +154,10 @@ type BuildJobStatus struct {
 	Stages []StageStatus `json:"stages,omitempty"`
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +optional
+	RunCount int64 `json:"runCount,omitempty"`
+	// +optional
+	LastRunAt string `json:"lastRunAt,omitempty"`
 }
 
 // +kubebuilder:object:root=true

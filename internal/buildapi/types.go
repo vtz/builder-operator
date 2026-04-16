@@ -14,19 +14,21 @@
 
 package buildapi
 
+import buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
+
 type BuildJobSummary struct {
-	Name         string       `json:"name"`
-	Namespace    string       `json:"namespace"`
-	Phase        string       `json:"phase"`
-	Board        string       `json:"board,omitempty"`
-	Platform     string       `json:"platform,omitempty"`
-	Architecture string       `json:"architecture,omitempty"`
-	Image        string       `json:"image,omitempty"`
-	ArtifactURI  string       `json:"artifactURI,omitempty"`
-	Stages       []StageInfo  `json:"stages,omitempty"`
-	PipelineRun  string       `json:"pipelineRun,omitempty"`
-	Source       *SourceInfo  `json:"source,omitempty"`
-	Age          string       `json:"age,omitempty"`
+	Name         string      `json:"name"`
+	Namespace    string      `json:"namespace"`
+	Phase        string      `json:"phase"`
+	Board        string      `json:"board,omitempty"`
+	Platform     string      `json:"platform,omitempty"`
+	Architecture string      `json:"architecture,omitempty"`
+	Image        string      `json:"image,omitempty"`
+	ArtifactURI  string      `json:"artifactURI,omitempty"`
+	Stages       []StageInfo `json:"stages,omitempty"`
+	PipelineRun  string      `json:"pipelineRun,omitempty"`
+	Source       *SourceInfo `json:"source,omitempty"`
+	Age          string      `json:"age,omitempty"`
 }
 
 type StageInfo struct {
@@ -43,6 +45,11 @@ type SourceInfo struct {
 
 type BuildJobListResponse struct {
 	Items []BuildJobSummary `json:"items"`
+}
+
+type CreateBuildJobRequest struct {
+	Name string                     `json:"name"`
+	Spec buildv1alpha1.BuildJobSpec `json:"spec"`
 }
 
 type ErrorResponse struct {

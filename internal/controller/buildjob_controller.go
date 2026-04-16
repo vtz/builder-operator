@@ -21,7 +21,9 @@ import (
 
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
 	"github.com/centos-automotive-suite/bob/internal/tekton"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,6 +44,8 @@ type BuildJobReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+const runAtAnnotation = "builder.sdv.cloud.redhat.com/run-at"
+
 func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -50,25 +54,44 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if bj.Status.CurrentPipelineRun == "" {
-		pipelineRun := tekton.BuildPipelineRun(&bj)
+	needsNewRun := bj.Status.CurrentPipelineRun == ""
+	if !needsNewRun {
+		runAt := bj.Annotations[runAtAnnotation]
+		if runAt != "" && runAt != bj.Status.LastRunAt {
+			needsNewRun = true
+		}
+	}
+
+	if needsNewRun {
+		if err := r.ensureCachePVCs(ctx, &bj); err != nil {
+			return ctrl.Result{}, fmt.Errorf("ensuring cache PVCs: %w", err)
+		}
+
+		runN := r.nextRunNumber(ctx, &bj)
+		pipelineRun := tekton.BuildPipelineRunN(&bj, runN)
 		if err := ctrl.SetControllerReference(&bj, pipelineRun, r.Scheme); err != nil {
 			return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
 		}
 		if err := r.Create(ctx, pipelineRun); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+			}
 			return ctrl.Result{}, fmt.Errorf("creating PipelineRun: %w", err)
 		}
 
 		bj.Status.CurrentPipelineRun = pipelineRun.GetName()
+		bj.Status.RunCount = runN
 		bj.Status.Phase = buildv1alpha1.PhasePending
+		bj.Status.LastRunAt = bj.Annotations[runAtAnnotation]
+		bj.Status.FailureReason = ""
 		bj.Status.Conditions = mergeCondition(
 			bj.Status.Conditions,
 			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunCreated", "PipelineRun created for BuildJob", bj.Generation),
 		)
 		if err := r.Status().Update(ctx, &bj); err != nil {
-			return ctrl.Result{}, fmt.Errorf("updating status after PipelineRun creation: %w", err)
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
-		logger.Info("created PipelineRun", "name", pipelineRun.GetName())
+		logger.Info("created PipelineRun", "name", pipelineRun.GetName(), "run", runN)
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -178,6 +201,58 @@ func mergeCondition(conditions []metav1.Condition, newCondition metav1.Condition
 		}
 	}
 	return append(conditions, newCondition)
+}
+
+func (r *BuildJobReconciler) nextRunNumber(ctx context.Context, bj *buildv1alpha1.BuildJob) int64 {
+	var prList unstructured.UnstructuredList
+	prList.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRunList"})
+	if err := r.List(ctx, &prList, client.InNamespace(bj.Namespace), client.MatchingLabels{
+		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
+	}); err != nil {
+		return bj.Status.RunCount + 1
+	}
+	n := int64(len(prList.Items)) + 1
+	if n <= bj.Status.RunCount {
+		n = bj.Status.RunCount + 1
+	}
+	return n
+}
+
+func (r *BuildJobReconciler) ensureCachePVCs(ctx context.Context, bj *buildv1alpha1.BuildJob) error {
+	if len(bj.Spec.Caches) == 0 {
+		return nil
+	}
+	logger := log.FromContext(ctx)
+	pvcName := tekton.SharedCachePVCName()
+	var existing corev1.PersistentVolumeClaim
+	if err := r.Get(ctx, client.ObjectKey{Namespace: bj.Namespace, Name: pvcName}, &existing); err == nil {
+		return nil
+	}
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: bj.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "bob",
+			},
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("10Gi"),
+				},
+			},
+		},
+	}
+	if err := r.Create(ctx, pvc); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return nil
+		}
+		return fmt.Errorf("creating shared cache PVC %q: %w", pvcName, err)
+	}
+	logger.Info("created shared cache PVC", "name", pvcName)
+	return nil
 }
 
 func (r *BuildJobReconciler) SetupWithManager(mgr ctrl.Manager) error {

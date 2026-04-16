@@ -28,11 +28,15 @@ const (
 )
 
 func BuildPipelineRun(bj *buildv1alpha1.BuildJob) *unstructured.Unstructured {
+	return BuildPipelineRunN(bj, bj.Generation)
+}
+
+func BuildPipelineRunN(bj *buildv1alpha1.BuildJob, runN int64) *unstructured.Unstructured {
 	labels := map[string]interface{}{
 		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
 	}
 
-	prName := fmt.Sprintf("%s-gen%d", bj.Name, bj.Generation)
+	prName := fmt.Sprintf("%s-run%d", bj.Name, runN)
 
 	image := bj.Spec.Toolchain.Image
 	if image == "" {
@@ -41,40 +45,58 @@ func BuildPipelineRun(bj *buildv1alpha1.BuildJob) *unstructured.Unstructured {
 
 	envVars := buildEnvVars(bj)
 
-	tasks := make([]interface{}, 0, len(bj.Spec.Stages))
+	tasks := make([]interface{}, 0, len(bj.Spec.Stages)+1)
 	var prevStage string
+
+	if bj.Spec.Source.Type == buildv1alpha1.SourceTypeGit && bj.Spec.Source.Git != nil {
+		rev := bj.Spec.Source.Git.Revision
+		if rev == "" {
+			rev = "main"
+		}
+		cloneCmd := fmt.Sprintf("git clone --branch %s --depth 1 %s source", shellQuote(rev), shellQuote(bj.Spec.Source.Git.URL))
+		cloneTask := buildTaskSpec("clone", image, cloneCmd, envVars, "", nil)
+		tasks = append(tasks, cloneTask)
+		prevStage = "clone"
+	}
+
 	for _, stage := range bj.Spec.Stages {
 		stageImage := image
 		if stage.Image != "" {
 			stageImage = stage.Image
 		}
-		task := buildTaskSpec(stage.Name, stageImage, stage.Command, envVars, prevStage)
+		task := buildTaskSpec(stage.Name, stageImage, stage.Command, envVars, prevStage, bj.Spec.Caches)
 		tasks = append(tasks, task)
 		prevStage = stage.Name
 	}
 
-	spec := map[string]interface{}{
-		"pipelineSpec": map[string]interface{}{
-			"workspaces": []interface{}{
-				map[string]interface{}{"name": "shared-workspace"},
-			},
-			"tasks": tasks,
-		},
-		"workspaces": []interface{}{
-			map[string]interface{}{
-				"name": "shared-workspace",
-				"volumeClaimTemplate": map[string]interface{}{
-					"spec": map[string]interface{}{
-						"accessModes": []interface{}{"ReadWriteOnce"},
-						"resources": map[string]interface{}{
-							"requests": map[string]interface{}{
-								"storage": "1Gi",
-							},
+	pipelineWorkspaces := []interface{}{
+		map[string]interface{}{"name": "shared-workspace"},
+	}
+	runWorkspaces := []interface{}{
+		map[string]interface{}{
+			"name": "shared-workspace",
+			"volumeClaimTemplate": map[string]interface{}{
+				"spec": map[string]interface{}{
+					"accessModes": []interface{}{"ReadWriteOnce"},
+					"resources": map[string]interface{}{
+						"requests": map[string]interface{}{
+							"storage": "10Gi",
 						},
 					},
 				},
 			},
 		},
+	}
+
+	// Cache PVCs are mounted directly as pod volumes in buildTaskSpec,
+	// not as Tekton workspaces (Tekton disallows multiple PVCs per TaskRun).
+
+	spec := map[string]interface{}{
+		"pipelineSpec": map[string]interface{}{
+			"workspaces": pipelineWorkspaces,
+			"tasks":      tasks,
+		},
+		"workspaces": runWorkspaces,
 	}
 
 	if bj.Spec.Timeout != nil {
@@ -103,26 +125,53 @@ func BuildPipelineRun(bj *buildv1alpha1.BuildJob) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: obj}
 }
 
-func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter string) map[string]interface{} {
+func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter string, caches []buildv1alpha1.CacheMount) map[string]interface{} {
 	allowPrivEsc := false
-	task := map[string]interface{}{
-		"name": name,
-		"taskSpec": map[string]interface{}{
-			"workspaces": []interface{}{
-				map[string]interface{}{"name": "ws"},
+	step := map[string]interface{}{
+		"name":  "run",
+		"image": image,
+		"env":   envVars,
+		"securityContext": map[string]interface{}{
+			"allowPrivilegeEscalation": allowPrivEsc,
+		},
+		"script": fmt.Sprintf("#!/usr/bin/env bash\nset -euo pipefail\ncd $(workspaces.ws.path)\n%s\n", command),
+	}
+
+	var volumes []interface{}
+	var volumeMounts []interface{}
+	if len(caches) > 0 {
+		volumes = append(volumes, map[string]interface{}{
+			"name": "bob-cache",
+			"persistentVolumeClaim": map[string]interface{}{
+				"claimName": "bob-cache",
 			},
-			"steps": []interface{}{
-				map[string]interface{}{
-					"name":  "run",
-					"image": image,
-					"env":   envVars,
-					"securityContext": map[string]interface{}{
-						"allowPrivilegeEscalation": allowPrivEsc,
-					},
-					"script": fmt.Sprintf("#!/usr/bin/env bash\nset -euo pipefail\ncd $(workspaces.ws.path)\nbash -lc %s\n", shellQuote(command)),
-				},
+		})
+		for _, cache := range caches {
+			volumeMounts = append(volumeMounts, map[string]interface{}{
+				"name":      "bob-cache",
+				"mountPath": cache.MountPath,
+				"subPath":   cache.Name,
+			})
+		}
+		step["volumeMounts"] = volumeMounts
+	}
+
+	taskSpec := map[string]interface{}{
+		"workspaces": []interface{}{
+			map[string]interface{}{
+				"name":      "ws",
+				"mountPath": "/workspace",
 			},
 		},
+		"steps": []interface{}{step},
+	}
+	if len(volumes) > 0 {
+		taskSpec["volumes"] = volumes
+	}
+
+	task := map[string]interface{}{
+		"name":     name,
+		"taskSpec": taskSpec,
 		"workspaces": []interface{}{
 			map[string]interface{}{
 				"name":      "ws",
@@ -134,6 +183,10 @@ func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter 
 		task["runAfter"] = []interface{}{runAfter}
 	}
 	return task
+}
+
+func SharedCachePVCName() string {
+	return "bob-cache"
 }
 
 func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {

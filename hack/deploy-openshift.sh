@@ -134,7 +134,7 @@ spec:
         - name: manager
           image: ${IMG}
           command: ["/manager"]
-          args: ["--leader-elect", "--api-bind-address=:8082"]
+          args: ["--leader-elect", "--api-bind-address=:8082", "--cli-dir=/cli"]
           ports:
             - name: api
               containerPort: 8082
@@ -184,6 +184,12 @@ echo "Verify:"
 echo "  oc get pods -n ${OPERATOR_NS}"
 echo "  oc get crd | grep builder.sdv.cloud.redhat.com"
 echo "  curl -k https://${BOB_ROUTE}/healthz"
+echo ""
+echo "Download bob CLI (share this with colleagues):"
+echo "  curl -Lo bob https://${BOB_ROUTE}/v1/cli/darwin/arm64 && chmod +x bob   # Mac Apple Silicon"
+echo "  curl -Lo bob https://${BOB_ROUTE}/v1/cli/darwin/amd64 && chmod +x bob   # Mac Intel"
+echo "  curl -Lo bob https://${BOB_ROUTE}/v1/cli/linux/amd64  && chmod +x bob   # Linux x86_64"
+echo "  curl -Lo bob https://${BOB_ROUTE}/v1/cli/linux/arm64  && chmod +x bob   # Linux arm64"
 echo ""
 echo "Deploy a sample BuildJob:"
 echo "  oc apply -f ${ROOT_DIR}/docs/examples/zephyr-hello-world.yaml"

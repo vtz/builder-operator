@@ -50,8 +50,8 @@ func TestBuildPipelineRun_DeterministicName(t *testing.T) {
 	bj := newTestBuildJob()
 	pr := BuildPipelineRun(bj)
 
-	if pr.GetName() != "body-ecu-gen3" {
-		t.Fatalf("expected deterministic name body-ecu-gen3, got %s", pr.GetName())
+	if pr.GetName() != "body-ecu-run3" {
+		t.Fatalf("expected deterministic name body-ecu-run3, got %s", pr.GetName())
 	}
 }
 
@@ -284,6 +284,125 @@ func TestBuildPipelineRun_WorkspaceIsVolumeClaimTemplate(t *testing.T) {
 	}
 	if _, has := ws["volumeClaimTemplate"]; !has {
 		t.Fatal("expected volumeClaimTemplate in workspace")
+	}
+}
+
+func TestBuildPipelineRunN_DifferentRunNumbers(t *testing.T) {
+	bj := newTestBuildJob()
+	pr1 := BuildPipelineRunN(bj, 1)
+	pr5 := BuildPipelineRunN(bj, 5)
+
+	if pr1.GetName() != "body-ecu-run1" {
+		t.Fatalf("expected body-ecu-run1, got %s", pr1.GetName())
+	}
+	if pr5.GetName() != "body-ecu-run5" {
+		t.Fatalf("expected body-ecu-run5, got %s", pr5.GetName())
+	}
+}
+
+func TestBuildPipelineRun_GitCloneTask(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Source = buildv1alpha1.SourceSpec{
+		Type: buildv1alpha1.SourceTypeGit,
+		Git:  &buildv1alpha1.GitSource{URL: "https://github.com/test/repo", Revision: "feature/test"},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	first := tasks[0].(map[string]interface{})
+	if first["name"] != "clone" {
+		t.Fatalf("expected first task to be clone, got %s", first["name"])
+	}
+
+	taskSpec := first["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	script := step["script"].(string)
+	if script == "" {
+		t.Fatal("clone script should not be empty")
+	}
+}
+
+func TestBuildPipelineRun_NoCacheVolumes(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Caches = nil
+	pr := BuildPipelineRun(bj)
+
+	tasks := getPipelineTasks(t, pr)
+	for _, task := range tasks {
+		m := task.(map[string]interface{})
+		taskSpec := m["taskSpec"].(map[string]interface{})
+		if _, has := taskSpec["volumes"]; has {
+			t.Fatalf("task %s should not have volumes when no caches", m["name"])
+		}
+	}
+}
+
+func TestBuildPipelineRun_WithCacheVolumes(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Caches = []buildv1alpha1.CacheMount{
+		{Name: "ccache", MountPath: "/root/.ccache"},
+		{Name: "west-modules", MountPath: "/root/.west-modules"},
+	}
+	pr := BuildPipelineRun(bj)
+
+	tasks := getPipelineTasks(t, pr)
+	for _, task := range tasks {
+		m := task.(map[string]interface{})
+		if m["name"] == "clone" {
+			continue
+		}
+		taskSpec := m["taskSpec"].(map[string]interface{})
+		volumes, ok := taskSpec["volumes"].([]interface{})
+		if !ok || len(volumes) == 0 {
+			t.Fatalf("task %s should have volumes for caches", m["name"])
+		}
+		vol := volumes[0].(map[string]interface{})
+		if vol["name"] != "bob-cache" {
+			t.Fatalf("expected volume name bob-cache, got %v", vol["name"])
+		}
+
+		steps := taskSpec["steps"].([]interface{})
+		step := steps[0].(map[string]interface{})
+		mounts, ok := step["volumeMounts"].([]interface{})
+		if !ok || len(mounts) != 2 {
+			t.Fatalf("expected 2 volume mounts for caches, got %d", len(mounts))
+		}
+		firstMount := mounts[0].(map[string]interface{})
+		if firstMount["mountPath"] != "/root/.ccache" {
+			t.Fatalf("expected ccache mount at /root/.ccache, got %v", firstMount["mountPath"])
+		}
+		if firstMount["subPath"] != "ccache" {
+			t.Fatalf("expected subPath ccache, got %v", firstMount["subPath"])
+		}
+	}
+}
+
+func TestBuildPipelineRun_NoGitSourceSkipsClone(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-build", Namespace: "default"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{Type: buildv1alpha1.SourceTypePVC},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task (no clone), got %d", len(tasks))
+	}
+	first := tasks[0].(map[string]interface{})
+	if first["name"] != "build" {
+		t.Fatalf("expected first task to be build, got %s", first["name"])
+	}
+}
+
+func TestSharedCachePVCName(t *testing.T) {
+	name := SharedCachePVCName()
+	if name != "bob-cache" {
+		t.Fatalf("expected bob-cache, got %s", name)
 	}
 }
 

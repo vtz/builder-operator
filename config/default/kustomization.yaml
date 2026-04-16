@@ -1,7 +1,13 @@
+namespace: bob-system
+
 resources:
+  - namespace.yaml
   - ../crd/bases/builder.sdv.cloud.redhat.com_buildjobs.yaml
   - ../crd/bases/builder.sdv.cloud.redhat.com_toolchains.yaml
   - ../crd/bases/builder.sdv.cloud.redhat.com_caches.yaml
   - ../crd/bases/builder.sdv.cloud.redhat.com_buildconfigs.yaml
+  - ../rbac/service_account.yaml
   - ../rbac/role.yaml
+  - ../rbac/role_binding.yaml
   - ../manager/manager.yaml
+  - ../manager/service.yaml
