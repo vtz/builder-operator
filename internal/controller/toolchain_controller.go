@@ -87,8 +87,9 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, nil
 		case "Failed":
 			tc.Status.Phase = buildv1alpha1.ToolchainPhaseFailed
+			tc.Status.CurrentBuildRun = ""
 			tc.Status.Conditions = mergeCondition(tc.Status.Conditions,
-				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "BuildFailed", "Toolchain image build failed", tc.Generation))
+				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "BuildFailed", "Toolchain image build failed — update spec to retry", tc.Generation))
 			_ = r.Status().Update(ctx, &tc)
 			return ctrl.Result{}, nil
 		default:
@@ -96,8 +97,13 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	// Don't retry automatically after failure — require a spec change.
+	if tc.Status.Phase == buildv1alpha1.ToolchainPhaseFailed {
+		return ctrl.Result{}, nil
+	}
+
 	// No existing build — create a Buildah TaskRun.
-	trName := fmt.Sprintf("tc-%s-build-%d", tc.Name, tc.Generation)
+	trName := fmt.Sprintf("tc-%s-%d", tc.Name, time.Now().Unix())
 	taskRun := r.buildTaskRun(&tc, trName)
 	if err := ctrl.SetControllerReference(&tc, taskRun, r.Scheme); err != nil {
 		return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
@@ -127,19 +133,23 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *ToolchainReconciler) buildTaskRun(tc *buildv1alpha1.Toolchain, name string) *unstructured.Unstructured {
 	build := tc.Spec.Build
 
+	// Buildah flags for OpenShift: vfs storage (no fuse), chroot isolation
+	// (no user namespace), and tls-verify=false for internal registry.
+	const budFlags = "--storage-driver=vfs --isolation=chroot --tls-verify=false"
+	const pushFlags = "--storage-driver=vfs --tls-verify=false"
+
 	var script string
 	if build.Dockerfile != "" {
-		// Inline Dockerfile: write it to a temp file then build with Buildah.
 		script = fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 CONTEXT_DIR=$(mktemp -d)
 cat > "$CONTEXT_DIR/Dockerfile" << 'DOCKERFILE_EOF'
 %s
 DOCKERFILE_EOF
-buildah bud --storage-driver=vfs --tls-verify=false -t %s -f "$CONTEXT_DIR/Dockerfile" "$CONTEXT_DIR"
-buildah push --storage-driver=vfs --tls-verify=false %s
+buildah bud %s -t %s -f "$CONTEXT_DIR/Dockerfile" "$CONTEXT_DIR"
+buildah push %s %s
 echo "Toolchain image pushed: %s"
-`, build.Dockerfile, tc.Spec.Image, tc.Spec.Image, tc.Spec.Image)
+`, build.Dockerfile, budFlags, tc.Spec.Image, pushFlags, tc.Spec.Image, tc.Spec.Image)
 	} else if build.ContextGit != nil {
 		dockerfilePath := build.DockerfilePath
 		if dockerfilePath == "" {
@@ -153,13 +163,11 @@ echo "Toolchain image pushed: %s"
 set -euo pipefail
 CONTEXT_DIR=$(mktemp -d)
 git clone --branch '%s' --depth 1 '%s' "$CONTEXT_DIR"
-buildah bud --storage-driver=vfs --tls-verify=false -t %s -f "$CONTEXT_DIR/%s" "$CONTEXT_DIR"
-buildah push --storage-driver=vfs --tls-verify=false %s
+buildah bud %s -t %s -f "$CONTEXT_DIR/%s" "$CONTEXT_DIR"
+buildah push %s %s
 echo "Toolchain image pushed: %s"
-`, rev, build.ContextGit.URL, tc.Spec.Image, dockerfilePath, tc.Spec.Image, tc.Spec.Image)
+`, rev, build.ContextGit.URL, budFlags, tc.Spec.Image, dockerfilePath, pushFlags, tc.Spec.Image, tc.Spec.Image)
 	}
-
-	allowPrivEsc := true // Buildah needs this for overlay operations
 
 	obj := map[string]interface{}{
 		"apiVersion": "tekton.dev/v1",
@@ -172,24 +180,24 @@ echo "Toolchain image pushed: %s"
 			},
 		},
 		"spec": map[string]interface{}{
+			// The pipeline SA is created by OpenShift Pipelines with the
+			// pipelines-scc SCC, which allows running containers as root
+			// (required by Buildah).
+			"serviceAccountName": "pipeline",
 			"taskSpec": map[string]interface{}{
 				"steps": []interface{}{
 					map[string]interface{}{
 						"name":  "build-push",
 						"image": "quay.io/buildah/stable:latest",
 						"securityContext": map[string]interface{}{
-							"allowPrivilegeEscalation": allowPrivEsc,
+							"privileged": true,
+							"runAsUser":  int64(0),
 						},
 						"script": script,
 					},
 				},
 			},
 		},
-	}
-
-	if tc.Spec.Qualification != nil || tc.Spec.Platform != "" {
-		sa := "bob-controller-manager"
-		obj["spec"].(map[string]interface{})["serviceAccountName"] = sa
 	}
 
 	return &unstructured.Unstructured{Object: obj}
