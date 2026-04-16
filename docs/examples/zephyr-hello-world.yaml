@@ -5,7 +5,7 @@ metadata:
   namespace: bob-builds
 spec:
   toolchain:
-    image: ghcr.io/zephyrproject-rtos/ci-base:v0.27.4
+    image: ghcr.io/zephyrproject-rtos/ci-base:v0.29.1
   source:
     type: git
     git:

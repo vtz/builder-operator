@@ -15,15 +15,15 @@ spec:
     platform: openbsw
     architecture: x86
   stages:
-    - name: deps
-      command: >-
-        apt-get update -qq &&
-        apt-get install -y --no-install-recommends cmake ninja-build g++ python3
     - name: configure
       command: >-
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends cmake ninja-build g++ python3 &&
         cd source && cmake --preset posix-freertos
     - name: build
       command: >-
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends cmake ninja-build g++ &&
         cd source && cmake --build --preset posix-freertos
     - name: package
       command: >-
