@@ -143,6 +143,11 @@ spec:
                   type: string
                 failureReason:
                   type: string
+                runCount:
+                  type: integer
+                  format: int64
+                lastRunAt:
+                  type: string
                 stages:
                   type: array
                   items:

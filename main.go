@@ -60,7 +60,8 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
@@ -82,7 +83,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	apiServer := buildapi.NewServer(mgr.GetClient(), apiAddr, cliDir, artifactsDir)
+	apiServer := buildapi.NewServer(mgr.GetClient(), apiAddr, cliDir, artifactsDir, cfg)
 	if err := mgr.Add(apiServer); err != nil {
 		setupLog.Error(err, "unable to add API server")
 		os.Exit(1)

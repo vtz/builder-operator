@@ -63,6 +63,21 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if needsNewRun {
+		// Guard against runaway loop: if a previous reconcile created a
+		// PipelineRun but the status update failed, we'd re-enter here
+		// and create another. Check for an existing active PipelineRun first.
+		if active := r.findActivePipelineRun(ctx, &bj); active != nil {
+			logger.Info("adopting existing PipelineRun", "name", active.GetName())
+			bj.Status.CurrentPipelineRun = active.GetName()
+			bj.Status.Phase = buildv1alpha1.PhasePending
+			bj.Status.LastRunAt = bj.Annotations[runAtAnnotation]
+			r.syncStatusFromPipelineRun(&bj, active)
+			if err := r.Status().Update(ctx, &bj); err != nil {
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+			}
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
 		if err := r.ensureCachePVCs(ctx, &bj); err != nil {
 			return ctrl.Result{}, fmt.Errorf("ensuring cache PVCs: %w", err)
 		}
@@ -89,6 +104,7 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunCreated", "PipelineRun created for BuildJob", bj.Generation),
 		)
 		if err := r.Status().Update(ctx, &bj); err != nil {
+			logger.Error(err, "status update failed after creating PipelineRun; will adopt on next reconcile", "pipelineRun", pipelineRun.GetName())
 			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
 		logger.Info("created PipelineRun", "name", pipelineRun.GetName(), "run", runN)
@@ -201,6 +217,38 @@ func mergeCondition(conditions []metav1.Condition, newCondition metav1.Condition
 		}
 	}
 	return append(conditions, newCondition)
+}
+
+func (r *BuildJobReconciler) findActivePipelineRun(ctx context.Context, bj *buildv1alpha1.BuildJob) *unstructured.Unstructured {
+	var prList unstructured.UnstructuredList
+	prList.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRunList"})
+	if err := r.List(ctx, &prList, client.InNamespace(bj.Namespace), client.MatchingLabels{
+		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
+	}); err != nil || len(prList.Items) == 0 {
+		return nil
+	}
+
+	for i := range prList.Items {
+		pr := &prList.Items[i]
+		conditions, _, _ := unstructured.NestedSlice(pr.Object, "status", "conditions")
+		terminated := false
+		for _, c := range conditions {
+			m, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			t, _, _ := unstructured.NestedString(m, "type")
+			s, _, _ := unstructured.NestedString(m, "status")
+			if t == "Succeeded" && (s == "True" || s == "False") {
+				terminated = true
+				break
+			}
+		}
+		if !terminated {
+			return pr
+		}
+	}
+	return nil
 }
 
 func (r *BuildJobReconciler) nextRunNumber(ctx context.Context, bj *buildv1alpha1.BuildJob) int64 {

@@ -28,8 +28,11 @@ import (
 	"time"
 
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -39,10 +42,15 @@ type Server struct {
 	Addr         string
 	CLIDir       string
 	ArtifactsDir string
+	KubeClient   kubernetes.Interface
 }
 
-func NewServer(c client.Client, addr, cliDir, artifactsDir string) *Server {
-	return &Server{Client: c, Addr: addr, CLIDir: cliDir, ArtifactsDir: artifactsDir}
+func NewServer(c client.Client, addr, cliDir, artifactsDir string, restConfig *rest.Config) *Server {
+	s := &Server{Client: c, Addr: addr, CLIDir: cliDir, ArtifactsDir: artifactsDir}
+	if restConfig != nil {
+		s.KubeClient, _ = kubernetes.NewForConfig(restConfig)
+	}
+	return s
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -54,6 +62,7 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}", s.handleGet)
 	mux.HandleFunc("POST /v1/namespaces/{namespace}/buildjobs/{name}/run", s.handleRun)
 	mux.HandleFunc("DELETE /v1/namespaces/{namespace}/buildjobs/{name}", s.handleDelete)
+	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/logs", s.handleLogs)
 	mux.HandleFunc("POST /v1/namespaces/{namespace}/buildjobs/{name}/artifacts/upload", s.handleArtifactUpload)
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/artifacts", s.handleArtifactList)
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/artifacts/{filename}", s.handleArtifactDownload)
@@ -217,6 +226,72 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	ns := r.PathValue("namespace")
+	name := r.PathValue("name")
+
+	var bj buildv1alpha1.BuildJob
+	if err := s.Client.Get(r.Context(), client.ObjectKey{Namespace: ns, Name: name}, &bj); err != nil {
+		if apierrors.IsNotFound(err) {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("BuildJob %q not found in namespace %q", name, ns))
+		} else {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("getting BuildJob: %v", err))
+		}
+		return
+	}
+
+	prName := bj.Status.CurrentPipelineRun
+	if prName == "" {
+		writeError(w, http.StatusNotFound, "no PipelineRun found for this BuildJob (build may not have started)")
+		return
+	}
+
+	if s.KubeClient == nil {
+		writeError(w, http.StatusInternalServerError, "kubernetes client not configured")
+		return
+	}
+
+	pods, err := s.KubeClient.CoreV1().Pods(ns).List(r.Context(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", prName),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("listing pods: %v", err))
+		return
+	}
+
+	if len(pods.Items) == 0 {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no pods found for PipelineRun %q (build may still be initializing)", prName))
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			fmt.Fprintf(w, "=== %s/%s ===\n", pod.Name, container.Name)
+			if flusher != nil {
+				flusher.Flush()
+			}
+
+			stream, err := s.KubeClient.CoreV1().Pods(ns).GetLogs(pod.Name, &corev1.PodLogOptions{
+				Container: container.Name,
+			}).Stream(r.Context())
+			if err != nil {
+				fmt.Fprintf(w, "[error reading logs: %v]\n\n", err)
+				continue
+			}
+			io.Copy(w, stream)
+			stream.Close()
+			w.Write([]byte("\n"))
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}
 }
 
 var validCLIPlatforms = map[string]map[string]bool{
