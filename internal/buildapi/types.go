@@ -24,6 +24,7 @@ type BuildJobSummary struct {
 	Platform     string      `json:"platform,omitempty"`
 	Architecture string      `json:"architecture,omitempty"`
 	Image        string      `json:"image,omitempty"`
+	CommitSHA    string      `json:"commitSHA,omitempty"`
 	ArtifactURI  string      `json:"artifactURI,omitempty"`
 	Stages       []StageInfo `json:"stages,omitempty"`
 	PipelineRun  string      `json:"pipelineRun,omitempty"`

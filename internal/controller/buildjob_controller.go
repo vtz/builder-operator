@@ -207,6 +207,19 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 	if bj.Spec.Artifacts.Path != "" {
 		bj.Status.ArtifactURI = bj.Spec.Artifacts.Path
 	}
+
+	results, _, _ := unstructured.NestedSlice(pr.Object, "status", "results")
+	for _, r := range results {
+		m, ok := r.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name, _, _ := unstructured.NestedString(m, "name")
+		value, _, _ := unstructured.NestedString(m, "value")
+		if name == "commit-sha" && value != "" {
+			bj.Status.CommitSHA = value
+		}
+	}
 }
 
 func mergeCondition(conditions []metav1.Condition, newCondition metav1.Condition) []metav1.Condition {

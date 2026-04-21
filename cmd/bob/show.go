@@ -47,6 +47,10 @@ func newShowCmd() *cobra.Command {
 				fmt.Println()
 			}
 
+			if bj.CommitSHA != "" {
+				fmt.Printf("Commit:      %s\n", bj.CommitSHA)
+			}
+
 			fmt.Printf("Image:       %s\n", bj.Image)
 
 			if bj.Board != "" {

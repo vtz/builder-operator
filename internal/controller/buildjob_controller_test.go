@@ -53,6 +53,12 @@ func TestSyncStatusFromPipelineRun_SetsSucceeded(t *testing.T) {
 						"pipelineTaskName": "build",
 					},
 				},
+				"results": []interface{}{
+					map[string]interface{}{
+						"name":  "commit-sha",
+						"value": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+					},
+				},
 			},
 		},
 	}
@@ -67,6 +73,33 @@ func TestSyncStatusFromPipelineRun_SetsSucceeded(t *testing.T) {
 	}
 	if len(bj.Status.Stages) != 1 {
 		t.Fatalf("expected one stage status, got %d", len(bj.Status.Stages))
+	}
+	if bj.Status.CommitSHA != "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" {
+		t.Fatalf("expected commitSHA to be populated, got %q", bj.Status.CommitSHA)
+	}
+}
+
+func TestSyncStatusFromPipelineRun_NoCommitSHAWithoutResults(t *testing.T) {
+	r := &BuildJobReconciler{}
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Generation: 1},
+	}
+	pr := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"status": map[string]interface{}{
+				"conditions": []interface{}{
+					map[string]interface{}{
+						"type":   "Succeeded",
+						"status": "True",
+						"reason": "Succeeded",
+					},
+				},
+			},
+		},
+	}
+	r.syncStatusFromPipelineRun(bj, pr)
+	if bj.Status.CommitSHA != "" {
+		t.Fatalf("expected empty commitSHA without results, got %q", bj.Status.CommitSHA)
 	}
 }
 

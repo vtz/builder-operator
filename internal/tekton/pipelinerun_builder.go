@@ -53,8 +53,14 @@ func BuildPipelineRunN(bj *buildv1alpha1.BuildJob, runN int64) *unstructured.Uns
 		if rev == "" {
 			rev = "main"
 		}
-		cloneCmd := fmt.Sprintf("git clone --branch %s --depth 1 %s source", shellQuote(rev), shellQuote(bj.Spec.Source.Git.URL))
-		cloneTask := buildTaskSpec("clone", image, cloneCmd, envVars, "", nil)
+		cloneScript := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+cd $(workspaces.ws.path)
+git clone --branch %s --depth 1 %s source
+cd source
+git rev-parse HEAD > $(results.commit-sha.path)
+`, shellQuote(rev), shellQuote(bj.Spec.Source.Git.URL))
+		cloneTask := buildCloneTaskSpec("clone", image, cloneScript, envVars)
 		tasks = append(tasks, cloneTask)
 		prevStage = "clone"
 	}
@@ -128,12 +134,23 @@ if r.status >= 400:
 	// Cache PVCs are mounted directly as pod volumes in buildTaskSpec,
 	// not as Tekton workspaces (Tekton disallows multiple PVCs per TaskRun).
 
+	pipelineSpec := map[string]interface{}{
+		"workspaces": pipelineWorkspaces,
+		"tasks":      tasks,
+	}
+
+	if bj.Spec.Source.Type == buildv1alpha1.SourceTypeGit && bj.Spec.Source.Git != nil {
+		pipelineSpec["results"] = []interface{}{
+			map[string]interface{}{
+				"name":  "commit-sha",
+				"value": "$(tasks.clone.results.commit-sha)",
+			},
+		}
+	}
+
 	spec := map[string]interface{}{
-		"pipelineSpec": map[string]interface{}{
-			"workspaces": pipelineWorkspaces,
-			"tasks":      tasks,
-		},
-		"workspaces": runWorkspaces,
+		"pipelineSpec": pipelineSpec,
+		"workspaces":   runWorkspaces,
 	}
 
 	if bj.Spec.Timeout != nil {
@@ -160,6 +177,36 @@ if r.status >= 400:
 	}
 
 	return &unstructured.Unstructured{Object: obj}
+}
+
+func buildCloneTaskSpec(name, image, script string, envVars []interface{}) map[string]interface{} {
+	allowPrivEsc := false
+	taskSpec := map[string]interface{}{
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+		},
+		"results": []interface{}{
+			map[string]interface{}{"name": "commit-sha", "description": "The resolved git commit SHA"},
+		},
+		"steps": []interface{}{
+			map[string]interface{}{
+				"name":  "run",
+				"image": image,
+				"env":   envVars,
+				"securityContext": map[string]interface{}{
+					"allowPrivilegeEscalation": allowPrivEsc,
+				},
+				"script": script,
+			},
+		},
+	}
+	return map[string]interface{}{
+		"name":     name,
+		"taskSpec": taskSpec,
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+		},
+	}
 }
 
 func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter string, caches []buildv1alpha1.CacheMount) map[string]interface{} {

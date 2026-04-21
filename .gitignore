@@ -1,2 +1,7 @@
 bin/
 deployment/
+dist/
+out/
+main
+coverage.out
+.DS_Store

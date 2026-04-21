@@ -321,6 +321,54 @@ func TestBuildPipelineRun_GitCloneTask(t *testing.T) {
 	if script == "" {
 		t.Fatal("clone script should not be empty")
 	}
+
+	results, ok := taskSpec["results"].([]interface{})
+	if !ok || len(results) == 0 {
+		t.Fatal("clone task should declare a commit-sha result")
+	}
+	result := results[0].(map[string]interface{})
+	if result["name"] != "commit-sha" {
+		t.Fatalf("expected result name commit-sha, got %v", result["name"])
+	}
+}
+
+func TestBuildPipelineRun_PipelineLevelCommitSHAResult(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Source = buildv1alpha1.SourceSpec{
+		Type: buildv1alpha1.SourceTypeGit,
+		Git:  &buildv1alpha1.GitSource{URL: "https://github.com/test/repo", Revision: "main"},
+	}
+	pr := BuildPipelineRun(bj)
+
+	spec := pr.Object["spec"].(map[string]interface{})
+	ps := spec["pipelineSpec"].(map[string]interface{})
+	results, ok := ps["results"].([]interface{})
+	if !ok || len(results) == 0 {
+		t.Fatal("pipelineSpec should declare a commit-sha result")
+	}
+	r := results[0].(map[string]interface{})
+	if r["name"] != "commit-sha" {
+		t.Fatalf("expected pipeline result commit-sha, got %v", r["name"])
+	}
+	if r["value"] != "$(tasks.clone.results.commit-sha)" {
+		t.Fatalf("expected result wired to clone task, got %v", r["value"])
+	}
+}
+
+func TestBuildPipelineRun_NoPipelineResultForPVC(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-build", Namespace: "default"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{Type: buildv1alpha1.SourceTypePVC},
+			Stages: []buildv1alpha1.NamedStage{{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}}},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	spec := pr.Object["spec"].(map[string]interface{})
+	ps := spec["pipelineSpec"].(map[string]interface{})
+	if _, has := ps["results"]; has {
+		t.Fatal("PVC source should not have pipeline-level results")
+	}
 }
 
 func TestBuildPipelineRun_NoCacheVolumes(t *testing.T) {

@@ -147,6 +147,8 @@ type BuildJobStatus struct {
 	// +optional
 	CurrentPipelineRun string `json:"currentPipelineRun,omitempty"`
 	// +optional
+	CommitSHA string `json:"commitSHA,omitempty"`
+	// +optional
 	ArtifactURI string `json:"artifactURI,omitempty"`
 	// +optional
 	FailureReason string `json:"failureReason,omitempty"`

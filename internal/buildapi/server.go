@@ -475,6 +475,7 @@ func toSummary(bj *buildv1alpha1.BuildJob) BuildJobSummary {
 		Platform:     bj.Spec.Target.Platform,
 		Architecture: bj.Spec.Target.Architecture,
 		Image:        bj.Spec.Toolchain.Image,
+		CommitSHA:    bj.Status.CommitSHA,
 		ArtifactURI:  bj.Status.ArtifactURI,
 		PipelineRun:  bj.Status.CurrentPipelineRun,
 	}

@@ -35,17 +35,20 @@ func newListCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tPHASE\tBOARD\tPLATFORM\tIMAGE\tSOURCE")
+			fmt.Fprintln(w, "NAME\tPHASE\tBOARD\tPLATFORM\tREVISION\tCOMMIT\tSOURCE")
 			for _, item := range items {
 				source := ""
+				revision := ""
 				if item.Source != nil {
 					source = item.Source.URL
-					if item.Source.Revision != "" && item.Source.Revision != "main" {
-						source += "@" + item.Source.Revision
-					}
+					revision = item.Source.Revision
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					item.Name, item.Phase, item.Board, item.Platform, item.Image, source)
+				commit := item.CommitSHA
+				if len(commit) > 8 {
+					commit = commit[:8]
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					item.Name, item.Phase, item.Board, item.Platform, revision, commit, source)
 			}
 			return w.Flush()
 		},

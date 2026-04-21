@@ -91,6 +91,7 @@ func TestBuildJobStatus_JSONRoundTrip(t *testing.T) {
 	status := BuildJobStatus{
 		Phase:              PhaseRunning,
 		CurrentPipelineRun: "demo-run1",
+		CommitSHA:          "abc123def456",
 		ArtifactURI:        "/workspace/artifacts",
 		RunCount:           3,
 		LastRunAt:          "2026-04-14T10:00:00Z",
@@ -117,6 +118,9 @@ func TestBuildJobStatus_JSONRoundTrip(t *testing.T) {
 	}
 	if decoded.CurrentPipelineRun != "demo-run1" {
 		t.Errorf("pipelineRun: got %q", decoded.CurrentPipelineRun)
+	}
+	if decoded.CommitSHA != "abc123def456" {
+		t.Errorf("commitSHA: got %q, want abc123def456", decoded.CommitSHA)
 	}
 	if decoded.RunCount != 3 {
 		t.Errorf("runCount: got %d, want 3", decoded.RunCount)
