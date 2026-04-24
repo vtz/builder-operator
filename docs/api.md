@@ -1,72 +1,69 @@
 # API Reference
 
+> **Note:** This document previously described a legacy `SoftwareBuild` CRD.
+> The canonical CRD is now **`BuildJob`** (see [Architecture — API naming history](architecture.md)).
+
 ## Group and Version
 
-- Group: `build.mycompany.io`
+- Group: `builder.sdv.cloud.redhat.com`
 - Version: `v1alpha1`
-- Kind: `SoftwareBuild`
+- Kind: `BuildJob`
 
-## `SoftwareBuild.spec`
+## `BuildJob.spec`
 
-### `runtime`
+### `toolchain`
 
 - `image` (string, default: `ubuntu:24.04`)
 - `serviceAccountName` (optional)
 
 ### `source`
 
-- `type`: `git` | `pvc` | `hostPath`
+- `type`: `git` | `pvc`
 - `git` (when `type=git`):
   - `url`
   - `revision` (default: `main`)
-  - `credentialsSecretRef` (`name`, optional `key`)
 - `pvc` (when `type=pvc`):
   - `claimName`
-  - `path` (default: `/`)
-- `hostPath` (when `type=hostPath`):
-  - `path`
+
+### `target`
+
+- `board` (optional)
+- `platform` (optional)
+- `architecture` (optional)
+- `variant` (optional)
 
 ### `stages`
 
-Each stage contains:
+User-defined ordered list of named stages. Each stage contains:
 
+- `name` (required)
 - `command` (required)
-- `image` (optional override)
+- `image` (optional override — uses toolchain image by default)
 
-Stages:
-- `fetch`
-- `prebuild`
-- `build`
-- `postbuild`
-- `deploy`
+### `artifacts`
 
-### `destination`
+- `path` (optional) — workspace-relative path to collect artifacts from
+- `destination` (optional): `pvc` | `oci`
 
-- `type`: `sharedFolder` | `registry` | `artifactory` | `quay`
-- `path` (optional)
-- `repository` (optional)
-- `credentialsSecretRef` (`name`, optional `key`)
+### `caches`
 
-### `timeoutSeconds`
+List of cache mounts. Each entry:
 
-- Optional positive integer.
+- `name` — subpath on the shared cache PVC
+- `mountPath` — where to mount in the container
 
-## `SoftwareBuild.status`
+### `timeout`
+
+- Optional `metav1.Duration` (e.g. `30m`).
+
+## `BuildJob.status`
 
 - `phase`: `Pending` | `Running` | `Succeeded` | `Failed`
 - `currentPipelineRun`: active Tekton run name
+- `commitSHA`: resolved git commit SHA
 - `artifactURI`: output location
 - `failureReason`: failure reason when failed
 - `stages[]`: stage-level progress snapshots
 - `conditions[]`: Kubernetes conditions
-
-## Secret model
-
-Secrets are referenced by name from CR fields. Credentials are not embedded directly in the CR.
-
-Examples:
-
-- Git:
-  - `spec.source.git.credentialsSecretRef.name`
-- Deploy destination:
-  - `spec.destination.credentialsSecretRef.name`
+- `runCount`: number of runs created
+- `lastRunAt`: timestamp of last run trigger
