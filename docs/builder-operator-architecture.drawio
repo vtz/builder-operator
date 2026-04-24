@@ -13,7 +13,7 @@
         <mxCell id="oa_cr_group" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
           <mxGeometry x="60" y="100" width="260" height="280" as="geometry" />
         </mxCell>
-        <mxCell id="oa_cr_l" value="&lt;b&gt;AutomotiveBuild CRs&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+        <mxCell id="oa_cr_l" value="&lt;b&gt;BuildJob CRs&lt;/b&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
           <mxGeometry x="75" y="108" width="230" height="25" as="geometry" />
         </mxCell>
         <mxCell id="oa_cr_desc" value="Custom Resources created by developers&lt;br&gt;or CI/CD pipelines via &lt;b&gt;oc apply&lt;/b&gt; or &lt;b&gt;git push&lt;/b&gt;" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
@@ -431,7 +431,7 @@
         <mxCell id="rf_title" value="CRD / CR Reconciliation Flow" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
           <mxGeometry x="40" y="20" width="500" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="rf_subtitle" value="What happens when a developer creates an AutomotiveBuild CR — from oc apply to signed artifact in registry" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+        <mxCell id="rf_subtitle" value="What happens when a developer creates an BuildJob CR — from oc apply to signed artifact in registry" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
           <mxGeometry x="40" y="55" width="750" height="20" as="geometry" />
         </mxCell>
         <mxCell id="rf_dev" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
@@ -467,7 +467,7 @@
         <mxCell id="rf_reconciler" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0066CC;strokeColor=none;" parent="1" vertex="1">
           <mxGeometry x="540" y="110" width="200" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="rf_reconciler_l" value="&lt;b&gt;Reconciler&lt;/b&gt;&lt;br&gt;Watches AutomotiveBuild CRs&lt;br&gt;Calls reconcile() on each event" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
+        <mxCell id="rf_reconciler_l" value="&lt;b&gt;Reconciler&lt;/b&gt;&lt;br&gt;Watches BuildJob CRs&lt;br&gt;Calls reconcile() on each event" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#FFFFFF;align=center;" parent="1" vertex="1">
           <mxGeometry x="540" y="118" width="200" height="55" as="geometry" />
         </mxCell>
         <mxCell id="rf_a3" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
@@ -1118,10 +1118,10 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="bh_title" value="Option B&#39; Hybrid: AutomotiveBuild CRD Outside, Tekton Inside" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
+        <mxCell id="bh_title" value="Option B&#39; Hybrid: BuildJob CRD Outside, Tekton Inside" style="text;html=1;fontSize=20;fontStyle=1;fontFamily=Red Hat Text;fontColor=#EE0000;align=left;verticalAlign=middle;" parent="1" vertex="1">
           <mxGeometry x="40" y="20" width="800" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="bh_subtitle" value="Developers interact with a purpose-built AutomotiveBuild CRD. The operator translates CRs into Tekton PipelineRuns internally." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
+        <mxCell id="bh_subtitle" value="Developers interact with a purpose-built BuildJob CRD. The operator translates CRs into Tekton PipelineRuns internally." style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#707070;align=left;" parent="1" vertex="1">
           <mxGeometry x="40" y="55" width="850" height="20" as="geometry" />
         </mxCell>
         <mxCell id="bh_dev" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
@@ -1136,13 +1136,13 @@
             <mxPoint x="350" y="185" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="bh_a_dev_l" value="oc apply AutomotiveBuild" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
+        <mxCell id="bh_a_dev_l" value="oc apply BuildJob" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=center;" parent="1" vertex="1">
           <mxGeometry x="370" y="155" width="160" height="18" as="geometry" />
         </mxCell>
         <mxCell id="bh_crd" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;strokeWidth=2;" parent="1" vertex="1">
           <mxGeometry x="100" y="185" width="550" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="bh_crd_l" value="&lt;b&gt;AutomotiveBuild CRD&lt;/b&gt; — developer-facing API" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#0066CC;align=left;" parent="1" vertex="1">
+        <mxCell id="bh_crd_l" value="&lt;b&gt;BuildJob CRD&lt;/b&gt; — developer-facing API" style="text;html=1;fontSize=14;fontStyle=1;fontFamily=Red Hat Text;fontColor=#0066CC;align=left;" parent="1" vertex="1">
           <mxGeometry x="120" y="193" width="500" height="25" as="geometry" />
         </mxCell>
         <mxCell id="bh_cr1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" parent="1" vertex="1">
@@ -1205,7 +1205,7 @@
         <mxCell id="bh_sync" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0066CC;" parent="1" vertex="1">
           <mxGeometry x="700" y="395" width="570" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="bh_sync_l" value="&lt;b&gt;Status Sync&lt;/b&gt; (PipelineRun → AutomotiveBuild CR)" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
+        <mxCell id="bh_sync_l" value="&lt;b&gt;Status Sync&lt;/b&gt; (PipelineRun → BuildJob CR)" style="text;html=1;fontSize=11;fontFamily=Red Hat Text;fontColor=#151515;align=left;" parent="1" vertex="1">
           <mxGeometry x="715" y="400" width="400" height="20" as="geometry" />
         </mxCell>
         <mxCell id="bh_sync_map" value="PipelineRun.status.conditions ──► CR.status.phase&lt;br&gt;TaskRun name ───────────────────► CR.status.currentStep&lt;br&gt;PipelineRun.status.results ────► CR.status.artifact&lt;br&gt;TaskRun exit codes ─────────────► CR.status.stepResults&lt;br&gt;&lt;br&gt;Developer queries CR status. Never sees PipelineRun." style="text;html=1;fontSize=8;fontFamily=Courier New;fontColor=#151515;align=left;spacing=3;" parent="1" vertex="1">
@@ -1280,7 +1280,7 @@
         <mxCell id="bh_t5_l" value="&lt;b&gt;TaskRun: comply&lt;/b&gt;&lt;br&gt;Pod: compliance tools&lt;br&gt;SBOM → Sign → Provenance" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
           <mxGeometry x="970" y="615" width="180" height="45" as="geometry" />
         </mxCell>
-        <mxCell id="bh_invisible" value="Tekton is an &lt;b&gt;implementation detail&lt;/b&gt;. Developer sees AutomotiveBuild CR status, not PipelineRun status." style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;fontStyle=2;" parent="1" vertex="1">
+        <mxCell id="bh_invisible" value="Tekton is an &lt;b&gt;implementation detail&lt;/b&gt;. Developer sees BuildJob CR status, not PipelineRun status." style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#707070;align=left;fontStyle=2;" parent="1" vertex="1">
           <mxGeometry x="130" y="680" width="600" height="18" as="geometry" />
         </mxCell>
         <mxCell id="bh_a_reg" value="" style="endArrow=block;html=1;strokeColor=#151515;strokeWidth=2;rounded=1;endFill=1;" parent="1" edge="1">
@@ -1298,7 +1298,7 @@
         <mxCell id="bh_key" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#707070;" parent="1" vertex="1">
           <mxGeometry x="60" y="845" width="1280" height="45" as="geometry" />
         </mxCell>
-        <mxCell id="bh_key_l" value="&lt;b&gt;Key:&lt;/b&gt; Developer sees the &lt;b&gt;top layer&lt;/b&gt; (AutomotiveBuild CR). Operator manages the &lt;b&gt;middle layer&lt;/b&gt; (translation). Tekton runs the &lt;b&gt;bottom layer&lt;/b&gt; (Pods). Three layers, but only the top is visible." style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
+        <mxCell id="bh_key_l" value="&lt;b&gt;Key:&lt;/b&gt; Developer sees the &lt;b&gt;top layer&lt;/b&gt; (BuildJob CR). Operator manages the &lt;b&gt;middle layer&lt;/b&gt; (translation). Tekton runs the &lt;b&gt;bottom layer&lt;/b&gt; (Pods). Three layers, but only the top is visible." style="text;html=1;fontSize=10;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
           <mxGeometry x="70" y="853" width="1260" height="30" as="geometry" />
         </mxCell>
       </root>
@@ -1448,7 +1448,7 @@
         <mxCell id="dp_s5_r" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D1F1BB;strokeColor=#63993D;" value="" vertex="1">
           <mxGeometry height="60" width="560" x="750" y="615" as="geometry" />
         </mxCell>
-        <mxCell id="dp_s5_r_l" parent="1" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" value="&lt;b&gt;Webhook → AutomotiveBuild CR created automatically&lt;/b&gt;&lt;br&gt;Same container, same steps, same build — now on the cluster" vertex="1">
+        <mxCell id="dp_s5_r_l" parent="1" style="text;html=1;fontSize=9;fontFamily=Red Hat Text;fontColor=#151515;align=center;" value="&lt;b&gt;Webhook → BuildJob CR created automatically&lt;/b&gt;&lt;br&gt;Same container, same steps, same build — now on the cluster" vertex="1">
           <mxGeometry height="45" width="560" x="750" y="623" as="geometry" />
         </mxCell>
         <mxCell id="dp_a5" edge="1" parent="1" style="endArrow=block;html=1;strokeColor=#63993D;strokeWidth=2;rounded=1;endFill=1;" value="">

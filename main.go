@@ -29,6 +29,7 @@ import (
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
 	"github.com/centos-automotive-suite/bob/internal/buildapi"
 	"github.com/centos-automotive-suite/bob/internal/controller"
+	"github.com/centos-automotive-suite/bob/internal/tekton"
 )
 
 var (
@@ -50,8 +51,18 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&apiAddr, "api-bind-address", ":8082", "The address the Build API binds to.")
 	var artifactsDir string
+	var pipelineAPIHost string
+	var pipelineAPIPort string
+	var maxUploadBytes int64
+	var maxUploadFiles int
+	var maxFileBytes int64
 	flag.StringVar(&cliDir, "cli-dir", "/cli", "Directory containing bob CLI binaries for download.")
 	flag.StringVar(&artifactsDir, "artifacts-dir", "/data/artifacts", "Directory for storing build artifacts.")
+	flag.StringVar(&pipelineAPIHost, "pipeline-api-host", "", "Build API host for generated pipeline tasks (default: bob-api.<operator-namespace>.svc).")
+	flag.StringVar(&pipelineAPIPort, "pipeline-api-port", "", "Build API port for generated pipeline tasks (default: 8082).")
+	flag.Int64Var(&maxUploadBytes, "max-upload-bytes", buildapi.DefaultMaxUploadBytes, "Maximum total upload size in bytes.")
+	flag.IntVar(&maxUploadFiles, "max-upload-files", buildapi.DefaultMaxUploadFiles, "Maximum number of files per upload.")
+	flag.Int64Var(&maxFileBytes, "max-file-bytes", buildapi.DefaultMaxFileBytes, "Maximum size of a single uploaded file in bytes.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -75,9 +86,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	if pipelineAPIHost == "" {
+		pipelineAPIHost = "bob-api." + operatorNamespace() + ".svc"
+	}
+	pipelineCfg := tekton.PipelineConfig{
+		APIHost: pipelineAPIHost,
+		APIPort: pipelineAPIPort,
+	}
 	if err := (&controller.BuildJobReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		PipelineConfig: pipelineCfg,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BuildJob")
 		os.Exit(1)
@@ -92,6 +111,9 @@ func main() {
 	}
 
 	apiServer := buildapi.NewServer(mgr.GetClient(), apiAddr, cliDir, artifactsDir, cfg)
+	apiServer.MaxUploadBytes = maxUploadBytes
+	apiServer.MaxUploadFiles = maxUploadFiles
+	apiServer.MaxFileBytes = maxFileBytes
 	if err := mgr.Add(apiServer); err != nil {
 		setupLog.Error(err, "unable to add API server")
 		os.Exit(1)
@@ -106,9 +128,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("starting manager", "pipelineAPIHost", pipelineAPIHost)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func operatorNamespace() string {
+	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
+		return ns
+	}
+	if data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+		return string(data)
+	}
+	return "bob-system"
 }

@@ -333,7 +333,56 @@ oc get pipelineruns -n bob-builds
 
 ---
 
-## 8. For deployers — Setting up bob on a new cluster
+## 8. Running the test suite
+
+### Unit tests (no cluster needed)
+
+```bash
+cd builder-operator
+go test ./... -v
+```
+
+### Integration tests (require envtest / kubebuilder-assets)
+
+```bash
+# Install kubebuilder assets (one-time)
+make envtest
+export KUBEBUILDER_ASSETS=$(bin/setup-envtest use 1.31 -p path)
+go test ./internal/controller/ -v
+```
+
+### What the tests cover
+
+| Package | Coverage areas |
+|---------|---------------|
+| `api/v1alpha1` | JSON round-trip, conditions, phase constants |
+| `internal/tekton` | PipelineRun generation, stages, env vars, caches, timeout, artifact upload env, configurable API host/port, no hardcoded bob-system |
+| `internal/controller` | `syncStatusFromPipelineRun` (succeeded/failed/running/pending), `mergeCondition`, `nextRunNumber`, `ensureCachePVCs`, `extractTaskRunResult` (found/missing/empty), `taskRunPhase`, `buildTaskRun` (inline/git, no --tls-verify=false, pinned image) |
+| `internal/buildapi` | List/get/create/run/delete, artifact upload (success, invalid gzip, oversized file, too many files, path traversal) |
+| `internal/buildapi/client` | List, get, run, delete, logs, auth header |
+| `cmd/bob` | Command wiring, flag validation |
+
+### Artifact upload limits
+
+The Build API enforces configurable upload safeguards:
+
+| Limit | Default | Flag |
+|-------|---------|------|
+| Total upload size | 1 GiB | `--max-upload-bytes` |
+| Files per upload | 1000 | `--max-upload-files` |
+| Per-file size | 512 MiB | `--max-file-bytes` |
+| Upload timeout | 5 min | (hardcoded in server) |
+
+### Configurable API endpoint
+
+Generated pipeline tasks derive the API host from the operator's own
+namespace (via `POD_NAMESPACE` env var or service account namespace file),
+defaulting to `bob-api.bob-system.svc`. Override with
+`--pipeline-api-host` and `--pipeline-api-port` flags.
+
+---
+
+## 9. For deployers — Setting up bob on a new cluster
 
 If you're the one deploying bob, use the deploy script:
 

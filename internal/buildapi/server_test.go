@@ -1,7 +1,9 @@
 package buildapi
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -301,6 +303,132 @@ func TestToSummary_StageStatuses(t *testing.T) {
 	}
 	if summary.Stages[0].Name != "build" || summary.Stages[0].State != "Succeeded" {
 		t.Fatalf("unexpected first stage: %+v", summary.Stages[0])
+	}
+}
+
+func makeTestTarGz(t *testing.T, files map[string][]byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	for name, content := range files {
+		hdr := &tar.Header{
+			Name:     name,
+			Mode:     0644,
+			Size:     int64(len(content)),
+			Typeflag: tar.TypeReg,
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write(content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tw.Close()
+	gw.Close()
+	return buf.Bytes()
+}
+
+func newTestServerWithUploadRoute(t *testing.T, objs ...runtime.Object) (*Server, *http.ServeMux) {
+	t.Helper()
+	s, mux := newTestServer(t, objs...)
+	mux.HandleFunc("POST /v1/namespaces/{namespace}/buildjobs/{name}/artifacts/upload", s.handleArtifactUpload)
+	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/artifacts", s.handleArtifactList)
+	return s, mux
+}
+
+func TestHandleArtifactUpload_Success(t *testing.T) {
+	s, mux := newTestServerWithUploadRoute(t)
+	_ = s
+
+	data := makeTestTarGz(t, map[string][]byte{
+		"zephyr.bin": bytes.Repeat([]byte{0x42}, 100),
+		"zephyr.hex": bytes.Repeat([]byte{0x48}, 50),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/namespaces/builds/buildjobs/demo/artifacts/upload", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/gzip")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["uploaded"] != float64(2) {
+		t.Fatalf("expected 2 uploaded, got %v", resp["uploaded"])
+	}
+}
+
+func TestHandleArtifactUpload_InvalidGzip(t *testing.T) {
+	_, mux := newTestServerWithUploadRoute(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/namespaces/builds/buildjobs/demo/artifacts/upload", bytes.NewReader([]byte("not gzip")))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid gzip, got %d", rr.Code)
+	}
+}
+
+func TestHandleArtifactUpload_FileTooLarge(t *testing.T) {
+	s, mux := newTestServerWithUploadRoute(t)
+	s.MaxFileBytes = 50
+
+	data := makeTestTarGz(t, map[string][]byte{
+		"big.bin": bytes.Repeat([]byte{0xFF}, 100),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/namespaces/builds/buildjobs/demo/artifacts/upload", bytes.NewReader(data))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized file, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleArtifactUpload_TooManyFiles(t *testing.T) {
+	s, mux := newTestServerWithUploadRoute(t)
+	s.MaxUploadFiles = 2
+
+	files := map[string][]byte{
+		"a.bin": {1},
+		"b.bin": {2},
+		"c.bin": {3},
+	}
+	data := makeTestTarGz(t, files)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/namespaces/builds/buildjobs/demo/artifacts/upload", bytes.NewReader(data))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for too many files, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleArtifactUpload_PathTraversal(t *testing.T) {
+	_, mux := newTestServerWithUploadRoute(t)
+
+	data := makeTestTarGz(t, map[string][]byte{
+		"../../../etc/passwd": []byte("root::0:0:::"),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/namespaces/builds/buildjobs/demo/artifacts/upload", bytes.NewReader(data))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["uploaded"] != float64(1) {
+		t.Fatalf("path traversal file should be written as base name, got uploaded=%v", resp["uploaded"])
 	}
 }
 

@@ -41,7 +41,8 @@ var pipelineRunGVK = schema.GroupVersionKind{
 
 type BuildJobReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme         *runtime.Scheme
+	PipelineConfig tekton.PipelineConfig
 }
 
 const runAtAnnotation = "builder.sdv.cloud.redhat.com/run-at"
@@ -83,7 +84,7 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 
 		runN := r.nextRunNumber(ctx, &bj)
-		pipelineRun := tekton.BuildPipelineRunN(&bj, runN)
+		pipelineRun := tekton.BuildPipelineRunWithConfig(&bj, runN, r.PipelineConfig)
 
 		if len(bj.Spec.Caches) > 0 {
 			if nodeSelector := r.cacheNodeSelector(ctx, &bj); nodeSelector != nil {
@@ -143,7 +144,7 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if bj.Status.Phase == buildv1alpha1.PhaseRunning || bj.Status.Phase == buildv1alpha1.PhasePending {
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -363,7 +364,11 @@ func (r *BuildJobReconciler) ensureCachePVCs(ctx context.Context, bj *buildv1alp
 }
 
 func (r *BuildJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	pipelineRun := &unstructured.Unstructured{}
+	pipelineRun.SetGroupVersionKind(pipelineRunGVK)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&buildv1alpha1.BuildJob{}).
+		Owns(pipelineRun).
 		Complete(r)
 }

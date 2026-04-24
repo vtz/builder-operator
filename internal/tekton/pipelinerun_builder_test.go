@@ -447,6 +447,87 @@ func TestBuildPipelineRun_NoGitSourceSkipsClone(t *testing.T) {
 	}
 }
 
+func TestBuildPipelineRun_ArtifactUpload_DefaultAPIHost(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{Path: "/workspace/artifacts"}
+	pr := BuildPipelineRun(bj)
+
+	tasks := getPipelineTasks(t, pr)
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	if last["name"] != "collect-artifacts" {
+		t.Fatalf("expected collect-artifacts task, got %s", last["name"])
+	}
+
+	taskSpec := last["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	envs := step["env"].([]interface{})
+
+	envMap := make(map[string]string)
+	for _, e := range envs {
+		m := e.(map[string]interface{})
+		envMap[m["name"].(string)] = m["value"].(string)
+	}
+
+	expectedHost := "bob-api.bob-system.svc"
+	if envMap["BOB_API_HOST"] != expectedHost {
+		t.Fatalf("expected BOB_API_HOST=%q (operator namespace), got %q", expectedHost, envMap["BOB_API_HOST"])
+	}
+	if envMap["BOB_API_PORT"] != "8082" {
+		t.Fatalf("expected BOB_API_PORT=8082 default, got %q", envMap["BOB_API_PORT"])
+	}
+}
+
+func TestBuildPipelineRun_ArtifactUpload_CustomAPIHost(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{Path: "/workspace/artifacts"}
+
+	cfg := PipelineConfig{APIHost: "custom-api.custom-ns.svc", APIPort: "9090"}
+	pr := BuildPipelineRunWithConfig(bj, 1, cfg)
+
+	tasks := getPipelineTasks(t, pr)
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	taskSpec := last["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	envs := step["env"].([]interface{})
+
+	envMap := make(map[string]string)
+	for _, e := range envs {
+		m := e.(map[string]interface{})
+		envMap[m["name"].(string)] = m["value"].(string)
+	}
+
+	if envMap["BOB_API_HOST"] != "custom-api.custom-ns.svc" {
+		t.Fatalf("expected custom host, got %q", envMap["BOB_API_HOST"])
+	}
+	if envMap["BOB_API_PORT"] != "9090" {
+		t.Fatalf("expected custom port, got %q", envMap["BOB_API_PORT"])
+	}
+}
+
+func TestBuildPipelineRun_CustomConfigOverridesDefault(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{Path: "/workspace/artifacts"}
+
+	cfg := PipelineConfig{APIHost: "my-api.custom-ns.svc"}
+	pr := BuildPipelineRunWithConfig(bj, 1, cfg)
+
+	tasks := getPipelineTasks(t, pr)
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	taskSpec := last["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	envs := step["env"].([]interface{})
+
+	for _, e := range envs {
+		m := e.(map[string]interface{})
+		if m["name"] == "BOB_API_HOST" && m["value"] != "my-api.custom-ns.svc" {
+			t.Fatalf("custom config should override default, got %v", m["value"])
+		}
+	}
+}
+
 func TestSharedCachePVCName(t *testing.T) {
 	name := SharedCachePVCName()
 	if name != "bob-cache" {
