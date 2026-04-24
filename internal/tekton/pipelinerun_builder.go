@@ -27,11 +27,22 @@ const (
 	PipelineRunKind  = "PipelineRun"
 )
 
+type PipelineConfig struct {
+	APIHost string
+	APIPort string
+}
+
+var DefaultPipelineConfig = PipelineConfig{}
+
 func BuildPipelineRun(bj *buildv1alpha1.BuildJob) *unstructured.Unstructured {
 	return BuildPipelineRunN(bj, bj.Generation)
 }
 
 func BuildPipelineRunN(bj *buildv1alpha1.BuildJob, runN int64) *unstructured.Unstructured {
+	return BuildPipelineRunWithConfig(bj, runN, DefaultPipelineConfig)
+}
+
+func BuildPipelineRunWithConfig(bj *buildv1alpha1.BuildJob, runN int64, cfg PipelineConfig) *unstructured.Unstructured {
 	labels := map[string]interface{}{
 		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
 	}
@@ -104,10 +115,18 @@ if r.status >= 400:
     sys.exit(1)
 "`, bj.Spec.Artifacts.Path)
 
+		apiHost := cfg.APIHost
+		if apiHost == "" {
+			apiHost = fmt.Sprintf("bob-api.%s.svc", bj.Namespace)
+		}
+		apiPort := cfg.APIPort
+		if apiPort == "" {
+			apiPort = "8082"
+		}
 		collectEnv := append(envVars,
 			map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
-			map[string]interface{}{"name": "BOB_API_HOST", "value": "bob-api.bob-system.svc"},
-			map[string]interface{}{"name": "BOB_API_PORT", "value": "8082"},
+			map[string]interface{}{"name": "BOB_API_HOST", "value": apiHost},
+			map[string]interface{}{"name": "BOB_API_PORT", "value": apiPort},
 		)
 		collectTask := buildCollectTask(image, uploadScript, collectEnv, prevStage)
 		tasks = append(tasks, collectTask)

@@ -41,7 +41,8 @@ var pipelineRunGVK = schema.GroupVersionKind{
 
 type BuildJobReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme         *runtime.Scheme
+	PipelineConfig tekton.PipelineConfig
 }
 
 const runAtAnnotation = "builder.sdv.cloud.redhat.com/run-at"
@@ -83,7 +84,7 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 
 		runN := r.nextRunNumber(ctx, &bj)
-		pipelineRun := tekton.BuildPipelineRunN(&bj, runN)
+		pipelineRun := tekton.BuildPipelineRunWithConfig(&bj, runN, r.PipelineConfig)
 
 		if len(bj.Spec.Caches) > 0 {
 			if nodeSelector := r.cacheNodeSelector(ctx, &bj); nodeSelector != nil {
