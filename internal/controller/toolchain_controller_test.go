@@ -187,6 +187,83 @@ func TestBuildTaskRun_GitContext(t *testing.T) {
 	}
 }
 
+func TestExtractTaskRunResult_Found(t *testing.T) {
+	r := &ToolchainReconciler{}
+	tr := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"status": map[string]interface{}{
+				"results": []interface{}{
+					map[string]interface{}{
+						"name":  "IMAGE_DIGEST",
+						"value": "sha256:abc123def456",
+					},
+					map[string]interface{}{
+						"name":  "IMAGE_URL",
+						"value": "registry.example.com/image:latest",
+					},
+				},
+			},
+		},
+	}
+	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
+	if digest != "sha256:abc123def456" {
+		t.Fatalf("expected sha256:abc123def456, got %q", digest)
+	}
+}
+
+func TestExtractTaskRunResult_NotFound(t *testing.T) {
+	r := &ToolchainReconciler{}
+	tr := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"status": map[string]interface{}{
+				"results": []interface{}{
+					map[string]interface{}{
+						"name":  "OTHER_RESULT",
+						"value": "something",
+					},
+				},
+			},
+		},
+	}
+	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
+	if digest != "" {
+		t.Fatalf("expected empty string for missing result, got %q", digest)
+	}
+}
+
+func TestExtractTaskRunResult_EmptyResults(t *testing.T) {
+	r := &ToolchainReconciler{}
+	tr := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"status": map[string]interface{}{},
+		},
+	}
+	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
+	if digest != "" {
+		t.Fatalf("expected empty string with no results, got %q", digest)
+	}
+}
+
+func TestExtractTaskRunResult_EmptyValue(t *testing.T) {
+	r := &ToolchainReconciler{}
+	tr := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"status": map[string]interface{}{
+				"results": []interface{}{
+					map[string]interface{}{
+						"name":  "IMAGE_DIGEST",
+						"value": "",
+					},
+				},
+			},
+		},
+	}
+	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
+	if digest != "" {
+		t.Fatalf("expected empty string for empty value, got %q", digest)
+	}
+}
+
 func TestBuildTaskRun_DefaultDockerfilePath(t *testing.T) {
 	r := &ToolchainReconciler{}
 	tc := &buildv1alpha1.Toolchain{

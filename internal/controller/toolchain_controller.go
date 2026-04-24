@@ -65,7 +65,9 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				tc.Status.CurrentBuildRun = ""
 				tc.Status.Conditions = mergeCondition(tc.Status.Conditions,
 					buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "TaskRunMissing", "Build TaskRun no longer exists", tc.Generation))
-				_ = r.Status().Update(ctx, &tc)
+				if updateErr := r.Status().Update(ctx, &tc); updateErr != nil {
+					return ctrl.Result{RequeueAfter: 2 * time.Second}, fmt.Errorf("updating status for missing TaskRun: %w", updateErr)
+				}
 				return ctrl.Result{}, nil
 			}
 			return ctrl.Result{}, fmt.Errorf("fetching TaskRun %q: %w", tc.Status.CurrentBuildRun, err)
@@ -74,7 +76,7 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		phase := r.taskRunPhase(&tr)
 		switch phase {
 		case "Succeeded":
-			digest, _, _ := unstructured.NestedString(tr.Object, "status", "results")
+			digest := r.extractTaskRunResult(&tr, "IMAGE_DIGEST")
 			tc.Status.Phase = buildv1alpha1.ToolchainPhaseReady
 			tc.Status.ResolvedDigest = digest
 			tc.Status.LastBuildTime = time.Now().UTC().Format(time.RFC3339)
@@ -90,7 +92,9 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			tc.Status.CurrentBuildRun = ""
 			tc.Status.Conditions = mergeCondition(tc.Status.Conditions,
 				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "BuildFailed", "Toolchain image build failed — update spec to retry", tc.Generation))
-			_ = r.Status().Update(ctx, &tc)
+			if err := r.Status().Update(ctx, &tc); err != nil {
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, fmt.Errorf("updating status after build failure: %w", err)
+			}
 			return ctrl.Result{}, nil
 		default:
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
@@ -112,7 +116,9 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if apierrors.IsAlreadyExists(err) {
 			tc.Status.CurrentBuildRun = trName
 			tc.Status.Phase = buildv1alpha1.ToolchainPhaseBuilding
-			_ = r.Status().Update(ctx, &tc)
+			if updateErr := r.Status().Update(ctx, &tc); updateErr != nil {
+				logger.Error(updateErr, "status update failed after adopting existing TaskRun")
+			}
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("creating build TaskRun: %w", err)
@@ -201,6 +207,24 @@ echo "Toolchain image pushed: %s"
 	}
 
 	return &unstructured.Unstructured{Object: obj}
+}
+
+// extractTaskRunResult iterates the TaskRun status.results array and returns
+// the value for the named result, or empty string if not found.
+func (r *ToolchainReconciler) extractTaskRunResult(tr *unstructured.Unstructured, name string) string {
+	results, _, _ := unstructured.NestedSlice(tr.Object, "status", "results")
+	for _, entry := range results {
+		m, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		n, _, _ := unstructured.NestedString(m, "name")
+		v, _, _ := unstructured.NestedString(m, "value")
+		if n == name && v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func (r *ToolchainReconciler) taskRunPhase(tr *unstructured.Unstructured) string {
