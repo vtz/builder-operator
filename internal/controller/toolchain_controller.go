@@ -136,13 +136,13 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
+const BuildahImage = "quay.io/buildah/stable:v1.39.0"
+
 func (r *ToolchainReconciler) buildTaskRun(tc *buildv1alpha1.Toolchain, name string) *unstructured.Unstructured {
 	build := tc.Spec.Build
 
-	// Buildah flags for OpenShift: vfs storage (no fuse), chroot isolation
-	// (no user namespace), and tls-verify=false for internal registry.
-	const budFlags = "--storage-driver=vfs --isolation=chroot --tls-verify=false"
-	const pushFlags = "--storage-driver=vfs --tls-verify=false"
+	const budFlags = "--storage-driver=vfs --isolation=chroot"
+	const pushFlags = "--storage-driver=vfs"
 
 	var script string
 	if build.Dockerfile != "" {
@@ -186,15 +186,12 @@ echo "Toolchain image pushed: %s"
 			},
 		},
 		"spec": map[string]interface{}{
-			// The pipeline SA is created by OpenShift Pipelines with the
-			// pipelines-scc SCC, which allows running containers as root
-			// (required by Buildah).
 			"serviceAccountName": "pipeline",
 			"taskSpec": map[string]interface{}{
 				"steps": []interface{}{
 					map[string]interface{}{
 						"name":  "build-push",
-						"image": "quay.io/buildah/stable:latest",
+						"image": BuildahImage,
 						"securityContext": map[string]interface{}{
 							"privileged": true,
 							"runAsUser":  int64(0),

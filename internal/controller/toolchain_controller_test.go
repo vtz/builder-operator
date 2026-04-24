@@ -130,8 +130,8 @@ func TestBuildTaskRun_InlineDockerfile(t *testing.T) {
 	}
 
 	step := steps[0].(map[string]interface{})
-	if step["image"] != "quay.io/buildah/stable:latest" {
-		t.Fatalf("expected buildah image, got %v", step["image"])
+	if step["image"] != BuildahImage {
+		t.Fatalf("expected pinned buildah image %s, got %v", BuildahImage, step["image"])
 	}
 
 	script := step["script"].(string)
@@ -261,6 +261,55 @@ func TestExtractTaskRunResult_EmptyValue(t *testing.T) {
 	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
 	if digest != "" {
 		t.Fatalf("expected empty string for empty value, got %q", digest)
+	}
+}
+
+func TestBuildTaskRun_NoTLSVerifyFalse(t *testing.T) {
+	r := &ToolchainReconciler{}
+	tc := &buildv1alpha1.Toolchain{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-tls", Namespace: "default", Generation: 1},
+		Spec: buildv1alpha1.ToolchainCRSpec{
+			Image: "registry.example.com/test:v1",
+			Build: &buildv1alpha1.ToolchainBuildSpec{
+				Dockerfile: "FROM scratch\n",
+			},
+		},
+	}
+	tr := r.buildTaskRun(tc, "tc-test-tls-1")
+	spec := tr.Object["spec"].(map[string]interface{})
+	taskSpec := spec["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	script := step["script"].(string)
+
+	if strings.Contains(script, "--tls-verify=false") {
+		t.Fatal("script should not contain --tls-verify=false (TLS verification must be enabled by default)")
+	}
+}
+
+func TestBuildTaskRun_PinnedImage(t *testing.T) {
+	r := &ToolchainReconciler{}
+	tc := &buildv1alpha1.Toolchain{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-pin", Namespace: "default", Generation: 1},
+		Spec: buildv1alpha1.ToolchainCRSpec{
+			Image: "registry.example.com/test:v1",
+			Build: &buildv1alpha1.ToolchainBuildSpec{
+				Dockerfile: "FROM scratch\n",
+			},
+		},
+	}
+	tr := r.buildTaskRun(tc, "tc-test-pin-1")
+	spec := tr.Object["spec"].(map[string]interface{})
+	taskSpec := spec["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	image := step["image"].(string)
+
+	if strings.Contains(image, ":latest") {
+		t.Fatalf("buildah image should be pinned, not :latest — got %q", image)
+	}
+	if image != BuildahImage {
+		t.Fatalf("expected BuildahImage constant %q, got %q", BuildahImage, image)
 	}
 }
 
