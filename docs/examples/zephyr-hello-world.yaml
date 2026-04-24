@@ -5,29 +5,29 @@ metadata:
   namespace: bob-builds
 spec:
   toolchain:
-    image: ghcr.io/zephyrproject-rtos/ci-base:v0.29.1
+    image: image-registry.openshift-image-registry.svc:5000/bob-builds/body-ecu:latest
   source:
     type: git
     git:
       url: https://github.com/zephyrproject-rtos/zephyr.git
-      revision: main
+      revision: ea6eade52b595b064af8bc232d26dc3b67eb9a6d
   target:
     board: native_sim/native/64
     platform: zephyr
     architecture: native
   stages:
     - name: fetch
-      command: "west init --mr main /workspace/zephyr-project && cd /workspace/zephyr-project && west update --narrow -o=--depth=1"
+      command: "mv source zephyr && west init -l zephyr && west update --narrow -o=--depth=1"
     - name: build
-      command: "cd /workspace/zephyr-project && ZEPHYR_TOOLCHAIN_VARIANT=host west build -p always -b ${BOB_BOARD} zephyr/samples/hello_world"
+      command: "ZEPHYR_TOOLCHAIN_VARIANT=host west build -p always -b ${BOB_BOARD} zephyr/samples/hello_world"
     - name: test
-      command: "cd /workspace/zephyr-project && timeout 5 ./build/zephyr/zephyr.exe || true"
+      command: "timeout 5 ./build/zephyr/zephyr.exe || true"
     - name: package
       command: >-
         mkdir -p /workspace/artifacts &&
-        cp /workspace/zephyr-project/build/zephyr/zephyr.exe /workspace/artifacts/ &&
-        cp /workspace/zephyr-project/build/zephyr/zephyr.elf /workspace/artifacts/ &&
-        cp /workspace/zephyr-project/build/zephyr/zephyr.map /workspace/artifacts/ 2>/dev/null || true
+        cp build/zephyr/zephyr.exe /workspace/artifacts/ &&
+        cp build/zephyr/zephyr.elf /workspace/artifacts/ &&
+        cp build/zephyr/zephyr.map /workspace/artifacts/ 2>/dev/null || true
   artifacts:
     destination: pvc
     path: /workspace/artifacts

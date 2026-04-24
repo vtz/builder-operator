@@ -56,10 +56,11 @@ func BuildPipelineRunN(bj *buildv1alpha1.BuildJob, runN int64) *unstructured.Uns
 		cloneScript := fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 cd $(workspaces.ws.path)
-git clone --branch %s --depth 1 %s source
+git clone %s source
 cd source
+git checkout %s
 git rev-parse HEAD > $(results.commit-sha.path)
-`, shellQuote(rev), shellQuote(bj.Spec.Source.Git.URL))
+`, shellQuote(bj.Spec.Source.Git.URL), shellQuote(rev))
 		cloneTask := buildCloneTaskSpec("clone", image, cloneScript, envVars)
 		tasks = append(tasks, cloneTask)
 		prevStage = "clone"
