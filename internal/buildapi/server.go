@@ -37,16 +37,37 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	DefaultMaxUploadBytes   int64 = 1 << 30 // 1 GiB
+	DefaultMaxUploadFiles         = 1000
+	DefaultMaxFileBytes     int64 = 512 << 20 // 512 MiB per file
+	DefaultUploadTimeoutSec       = 300
+)
+
 type Server struct {
 	Client       client.Client
 	Addr         string
 	CLIDir       string
 	ArtifactsDir string
 	KubeClient   kubernetes.Interface
+
+	MaxUploadBytes   int64
+	MaxUploadFiles   int
+	MaxFileBytes     int64
+	UploadTimeoutSec int
 }
 
 func NewServer(c client.Client, addr, cliDir, artifactsDir string, restConfig *rest.Config) *Server {
-	s := &Server{Client: c, Addr: addr, CLIDir: cliDir, ArtifactsDir: artifactsDir}
+	s := &Server{
+		Client:           c,
+		Addr:             addr,
+		CLIDir:           cliDir,
+		ArtifactsDir:     artifactsDir,
+		MaxUploadBytes:   DefaultMaxUploadBytes,
+		MaxUploadFiles:   DefaultMaxUploadFiles,
+		MaxFileBytes:     DefaultMaxFileBytes,
+		UploadTimeoutSec: DefaultUploadTimeoutSec,
+	}
 	if restConfig != nil {
 		s.KubeClient, _ = kubernetes.NewForConfig(restConfig)
 	}
@@ -365,13 +386,21 @@ func (s *Server) handleArtifactUpload(w http.ResponseWriter, r *http.Request) {
 	ns := r.PathValue("namespace")
 	name := r.PathValue("name")
 
+	uploadTimeout := time.Duration(s.UploadTimeoutSec) * time.Second
+	ctx, cancel := context.WithTimeout(r.Context(), uploadTimeout)
+	defer cancel()
+	r = r.WithContext(ctx)
+
+	limitedBody := http.MaxBytesReader(w, r.Body, s.MaxUploadBytes)
+	defer limitedBody.Close()
+
 	dir := s.artifactDir(ns, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("creating artifact dir: %v", err))
 		return
 	}
 
-	gr, err := gzip.NewReader(r.Body)
+	gr, err := gzip.NewReader(limitedBody)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid gzip: %v", err))
 		return
@@ -386,6 +415,10 @@ func (s *Server) handleArtifactUpload(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err != nil {
+			if r.Context().Err() != nil {
+				writeError(w, http.StatusRequestTimeout, "upload timed out")
+				return
+			}
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid tar entry: %v", err))
 			return
 		}
@@ -396,17 +429,26 @@ func (s *Server) handleArtifactUpload(w http.ResponseWriter, r *http.Request) {
 		if clean == "." || clean == ".." || strings.Contains(clean, "/") {
 			continue
 		}
+		if count >= s.MaxUploadFiles {
+			writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("too many files: limit is %d", s.MaxUploadFiles))
+			return
+		}
 		f, err := os.Create(filepath.Join(dir, clean))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("creating file: %v", err))
 			return
 		}
-		if _, err := io.Copy(f, tr); err != nil {
-			f.Close()
-			writeError(w, http.StatusInternalServerError, fmt.Sprintf("writing file: %v", err))
+		written, copyErr := io.Copy(f, io.LimitReader(tr, s.MaxFileBytes+1))
+		f.Close()
+		if copyErr != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("writing file: %v", copyErr))
 			return
 		}
-		f.Close()
+		if written > s.MaxFileBytes {
+			os.Remove(filepath.Join(dir, clean))
+			writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("file %q exceeds max size of %d bytes", clean, s.MaxFileBytes))
+			return
+		}
 		count++
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"uploaded": count})
