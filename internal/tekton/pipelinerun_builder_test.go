@@ -469,9 +469,9 @@ func TestBuildPipelineRun_ArtifactUpload_DefaultAPIHost(t *testing.T) {
 		envMap[m["name"].(string)] = m["value"].(string)
 	}
 
-	expectedHost := "bob-api.builds.svc"
+	expectedHost := "bob-api.bob-system.svc"
 	if envMap["BOB_API_HOST"] != expectedHost {
-		t.Fatalf("expected BOB_API_HOST=%q (derived from namespace), got %q", expectedHost, envMap["BOB_API_HOST"])
+		t.Fatalf("expected BOB_API_HOST=%q (operator namespace), got %q", expectedHost, envMap["BOB_API_HOST"])
 	}
 	if envMap["BOB_API_PORT"] != "8082" {
 		t.Fatalf("expected BOB_API_PORT=8082 default, got %q", envMap["BOB_API_PORT"])
@@ -506,10 +506,12 @@ func TestBuildPipelineRun_ArtifactUpload_CustomAPIHost(t *testing.T) {
 	}
 }
 
-func TestBuildPipelineRun_NoHardcodedBobSystem(t *testing.T) {
+func TestBuildPipelineRun_CustomConfigOverridesDefault(t *testing.T) {
 	bj := newTestBuildJob()
 	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{Path: "/workspace/artifacts"}
-	pr := BuildPipelineRun(bj)
+
+	cfg := PipelineConfig{APIHost: "my-api.custom-ns.svc"}
+	pr := BuildPipelineRunWithConfig(bj, 1, cfg)
 
 	tasks := getPipelineTasks(t, pr)
 	last := tasks[len(tasks)-1].(map[string]interface{})
@@ -520,9 +522,8 @@ func TestBuildPipelineRun_NoHardcodedBobSystem(t *testing.T) {
 
 	for _, e := range envs {
 		m := e.(map[string]interface{})
-		v := m["value"].(string)
-		if v == "bob-api.bob-system.svc" {
-			t.Fatal("found hardcoded bob-api.bob-system.svc — should use namespace-derived host")
+		if m["name"] == "BOB_API_HOST" && m["value"] != "my-api.custom-ns.svc" {
+			t.Fatalf("custom config should override default, got %v", m["value"])
 		}
 	}
 }

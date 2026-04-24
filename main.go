@@ -58,7 +58,7 @@ func main() {
 	var maxFileBytes int64
 	flag.StringVar(&cliDir, "cli-dir", "/cli", "Directory containing bob CLI binaries for download.")
 	flag.StringVar(&artifactsDir, "artifacts-dir", "/data/artifacts", "Directory for storing build artifacts.")
-	flag.StringVar(&pipelineAPIHost, "pipeline-api-host", "", "Build API host for generated pipeline tasks (default: bob-api.<namespace>.svc).")
+	flag.StringVar(&pipelineAPIHost, "pipeline-api-host", "", "Build API host for generated pipeline tasks (default: bob-api.<operator-namespace>.svc).")
 	flag.StringVar(&pipelineAPIPort, "pipeline-api-port", "", "Build API port for generated pipeline tasks (default: 8082).")
 	flag.Int64Var(&maxUploadBytes, "max-upload-bytes", buildapi.DefaultMaxUploadBytes, "Maximum total upload size in bytes.")
 	flag.IntVar(&maxUploadFiles, "max-upload-files", buildapi.DefaultMaxUploadFiles, "Maximum number of files per upload.")
@@ -86,6 +86,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	if pipelineAPIHost == "" {
+		pipelineAPIHost = "bob-api." + operatorNamespace() + ".svc"
+	}
 	pipelineCfg := tekton.PipelineConfig{
 		APIHost: pipelineAPIHost,
 		APIPort: pipelineAPIPort,
@@ -125,9 +128,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("starting manager", "pipelineAPIHost", pipelineAPIHost)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func operatorNamespace() string {
+	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
+		return ns
+	}
+	if data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+		return string(data)
+	}
+	return "bob-system"
 }

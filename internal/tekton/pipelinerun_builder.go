@@ -117,7 +117,7 @@ if r.status >= 400:
 
 		apiHost := cfg.APIHost
 		if apiHost == "" {
-			apiHost = fmt.Sprintf("bob-api.%s.svc", bj.Namespace)
+			apiHost = "bob-api.bob-system.svc"
 		}
 		apiPort := cfg.APIPort
 		if apiPort == "" {

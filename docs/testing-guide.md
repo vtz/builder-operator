@@ -375,9 +375,10 @@ The Build API enforces configurable upload safeguards:
 
 ### Configurable API endpoint
 
-Generated pipeline tasks no longer hardcode `bob-api.bob-system.svc`.
-The API host defaults to `bob-api.<buildjob-namespace>.svc` and can be
-overridden with `--pipeline-api-host` and `--pipeline-api-port` flags.
+Generated pipeline tasks derive the API host from the operator's own
+namespace (via `POD_NAMESPACE` env var or service account namespace file),
+defaulting to `bob-api.bob-system.svc`. Override with
+`--pipeline-api-host` and `--pipeline-api-port` flags.
 
 ---
 
