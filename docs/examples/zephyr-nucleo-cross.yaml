@@ -17,21 +17,7 @@ spec:
     architecture: arm
   stages:
     - name: fetch
-      command: >-
-        if [ -d /root/.west-modules/.west ]; then
-          echo "Restoring cached west modules..." &&
-          cp -a /root/.west-modules/.west . 2>/dev/null || true &&
-          cp -a /root/.west-modules/modules . 2>/dev/null || true &&
-          cp -a /root/.west-modules/bootloader . 2>/dev/null || true &&
-          cp -a /root/.west-modules/tools . 2>/dev/null || true;
-        fi &&
-        west init -l source 2>/dev/null || true &&
-        west update &&
-        echo "Saving modules to cache..." &&
-        cp -a .west /root/.west-modules/ &&
-        for d in modules bootloader tools; do
-          [ -d "$d" ] && cp -a "$d" /root/.west-modules/;
-        done
+      command: "west init -l source && west update"
     - name: build
       command: "west build -b ${BOB_BOARD} source/app"
     - name: package

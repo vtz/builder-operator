@@ -84,6 +84,14 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		runN := r.nextRunNumber(ctx, &bj)
 		pipelineRun := tekton.BuildPipelineRunN(&bj, runN)
+
+		if len(bj.Spec.Caches) > 0 {
+			if nodeSelector := r.cacheNodeSelector(ctx, &bj); nodeSelector != nil {
+				if err := unstructured.SetNestedField(pipelineRun.Object, nodeSelector, "spec", "taskRunTemplate", "podTemplate", "nodeSelector"); err != nil {
+					logger.Error(err, "failed to set nodeSelector for cache affinity")
+				}
+			}
+		}
 		if err := ctrl.SetControllerReference(&bj, pipelineRun, r.Scheme); err != nil {
 			return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
 		}
@@ -277,6 +285,44 @@ func (r *BuildJobReconciler) nextRunNumber(ctx context.Context, bj *buildv1alpha
 		n = bj.Status.RunCount + 1
 	}
 	return n
+}
+
+// cacheNodeSelector returns a nodeSelector map that pins pods to the same
+// topology zone as the cache PV. This prevents scheduling failures when the
+// cache PVC (RWO) is bound to a node in a different zone than the workspace.
+func (r *BuildJobReconciler) cacheNodeSelector(ctx context.Context, bj *buildv1alpha1.BuildJob) map[string]interface{} {
+	logger := log.FromContext(ctx)
+	pvcName := tekton.SharedCachePVCName()
+
+	var pvc corev1.PersistentVolumeClaim
+	if err := r.Get(ctx, client.ObjectKey{Namespace: bj.Namespace, Name: pvcName}, &pvc); err != nil {
+		return nil
+	}
+	if pvc.Spec.VolumeName == "" {
+		return nil
+	}
+
+	var pv corev1.PersistentVolume
+	if err := r.Get(ctx, client.ObjectKey{Name: pvc.Spec.VolumeName}, &pv); err != nil {
+		return nil
+	}
+	if pv.Spec.NodeAffinity == nil || pv.Spec.NodeAffinity.Required == nil {
+		return nil
+	}
+
+	selector := map[string]interface{}{}
+	for _, term := range pv.Spec.NodeAffinity.Required.NodeSelectorTerms {
+		for _, expr := range term.MatchExpressions {
+			if expr.Operator == corev1.NodeSelectorOpIn && len(expr.Values) == 1 {
+				selector[expr.Key] = expr.Values[0]
+			}
+		}
+	}
+	if len(selector) > 0 {
+		logger.Info("pinning pipeline to cache PV zone", "nodeSelector", selector)
+		return selector
+	}
+	return nil
 }
 
 func (r *BuildJobReconciler) ensureCachePVCs(ctx context.Context, bj *buildv1alpha1.BuildJob) error {
