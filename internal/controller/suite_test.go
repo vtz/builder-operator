@@ -68,7 +68,7 @@ func setupEnvtest() {
 
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{"../../../config/crd/bases"},
-		CRDs:                  []*apiextensionsv1.CustomResourceDefinition{minimalPipelineRunCRD()},
+		CRDs:                  []*apiextensionsv1.CustomResourceDefinition{minimalPipelineRunCRD(), minimalTaskRunCRD()},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -95,7 +95,14 @@ func setupEnvtest() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		panic(fmt.Sprintf("failed to set up reconciler: %v", err))
+		panic(fmt.Sprintf("failed to set up BuildJob reconciler: %v", err))
+	}
+
+	if err := (&ToolchainReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		panic(fmt.Sprintf("failed to set up Toolchain reconciler: %v", err))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -118,6 +125,39 @@ func minimalPipelineRunCRD() *apiextensionsv1.CustomResourceDefinition {
 			Names: apiextensionsv1.CustomResourceDefinitionNames{
 				Kind:   "PipelineRun",
 				Plural: "pipelineruns",
+			},
+			Scope: apiextensionsv1.NamespaceScoped,
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				{
+					Name:    "v1",
+					Served:  true,
+					Storage: true,
+					Schema: &apiextensionsv1.CustomResourceValidation{
+						OpenAPIV3Schema: &apiextensionsv1.JSONSchemaProps{
+							Type:                   "object",
+							XPreserveUnknownFields: &trueVal,
+						},
+					},
+					Subresources: &apiextensionsv1.CustomResourceSubresources{
+						Status: &apiextensionsv1.CustomResourceSubresourceStatus{},
+					},
+				},
+			},
+		},
+	}
+}
+
+func minimalTaskRunCRD() *apiextensionsv1.CustomResourceDefinition {
+	trueVal := true
+	return &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "taskruns.tekton.dev",
+		},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "tekton.dev",
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Kind:   "TaskRun",
+				Plural: "taskruns",
 			},
 			Scope: apiextensionsv1.NamespaceScoped,
 			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{

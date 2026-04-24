@@ -97,7 +97,7 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 			return ctrl.Result{}, nil
 		default:
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 	}
 
@@ -248,8 +248,18 @@ func (r *ToolchainReconciler) taskRunPhase(tr *unstructured.Unstructured) string
 	return "Running"
 }
 
+var taskRunGVK = schema.GroupVersionKind{
+	Group:   "tekton.dev",
+	Version: "v1",
+	Kind:    "TaskRun",
+}
+
 func (r *ToolchainReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	taskRun := &unstructured.Unstructured{}
+	taskRun.SetGroupVersionKind(taskRunGVK)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&buildv1alpha1.Toolchain{}).
+		Owns(taskRun).
 		Complete(r)
 }
