@@ -59,7 +59,8 @@ func BuildPipelineRunWithConfig(bj *buildv1alpha1.BuildJob, runN int64, cfg Pipe
 	tasks := make([]interface{}, 0, len(bj.Spec.Stages)+1)
 	var prevStage string
 
-	if bj.Spec.Source.Type == buildv1alpha1.SourceTypeGit && bj.Spec.Source.Git != nil {
+	switch {
+	case bj.Spec.Source.Type == buildv1alpha1.SourceTypeGit && bj.Spec.Source.Git != nil:
 		rev := bj.Spec.Source.Git.Revision
 		if rev == "" {
 			rev = "main"
@@ -75,6 +76,24 @@ git rev-parse HEAD > $(results.commit-sha.path)
 		cloneTask := buildCloneTaskSpec("clone", image, cloneScript, envVars)
 		tasks = append(tasks, cloneTask)
 		prevStage = "clone"
+
+	case bj.Spec.Source.Type == buildv1alpha1.SourceTypePVC && bj.Spec.Source.PVC != nil:
+		srcPath := bj.Spec.Source.PVC.Path
+		if srcPath == "" || srcPath == "/" {
+			srcPath = "/"
+		}
+		if !strings.HasSuffix(srcPath, "/") {
+			srcPath += "/"
+		}
+		copyScript := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p $(workspaces.ws.path)/source
+cp -a /mnt/pvc-source%s. $(workspaces.ws.path)/source/
+echo "Copied PVC source to workspace"
+`, srcPath)
+		copyTask := buildPVCCopyTaskSpec("copy-source", image, copyScript, envVars, bj.Spec.Source.PVC.ClaimName)
+		tasks = append(tasks, copyTask)
+		prevStage = "copy-source"
 	}
 
 	for _, stage := range bj.Spec.Stages {
@@ -217,6 +236,49 @@ func buildCloneTaskSpec(name, image, script string, envVars []interface{}) map[s
 					"allowPrivilegeEscalation": allowPrivEsc,
 				},
 				"script": script,
+			},
+		},
+	}
+	return map[string]interface{}{
+		"name":     name,
+		"taskSpec": taskSpec,
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+		},
+	}
+}
+
+func buildPVCCopyTaskSpec(name, image, script string, envVars []interface{}, claimName string) map[string]interface{} {
+	allowPrivEsc := false
+	taskSpec := map[string]interface{}{
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+		},
+		"volumes": []interface{}{
+			map[string]interface{}{
+				"name": "pvc-source",
+				"persistentVolumeClaim": map[string]interface{}{
+					"claimName": claimName,
+					"readOnly":  true,
+				},
+			},
+		},
+		"steps": []interface{}{
+			map[string]interface{}{
+				"name":  "run",
+				"image": image,
+				"env":   envVars,
+				"securityContext": map[string]interface{}{
+					"allowPrivilegeEscalation": allowPrivEsc,
+				},
+				"script": script,
+				"volumeMounts": []interface{}{
+					map[string]interface{}{
+						"name":      "pvc-source",
+						"mountPath": "/mnt/pvc-source",
+						"readOnly":  true,
+					},
+				},
 			},
 		},
 	}

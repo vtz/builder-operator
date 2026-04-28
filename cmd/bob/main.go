@@ -53,6 +53,7 @@ Configure via environment variables:
 		newLogsCmd(),
 		newDeleteCmd(),
 		newArtifactsCmd(),
+		newSyncCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

@@ -83,6 +83,19 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, fmt.Errorf("ensuring cache PVCs: %w", err)
 		}
 
+		if err := r.validateSourcePVC(ctx, &bj); err != nil {
+			bj.Status.Phase = buildv1alpha1.PhaseFailed
+			bj.Status.FailureReason = "SourcePVCNotFound"
+			bj.Status.Conditions = mergeCondition(
+				bj.Status.Conditions,
+				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "SourcePVCNotFound", err.Error(), bj.Generation),
+			)
+			if statusErr := r.Status().Update(ctx, &bj); statusErr != nil {
+				return ctrl.Result{}, fmt.Errorf("updating status for missing source PVC: %w", statusErr)
+			}
+			return ctrl.Result{}, nil
+		}
+
 		runN := r.nextRunNumber(ctx, &bj)
 		pipelineRun := tekton.BuildPipelineRunWithConfig(&bj, runN, r.PipelineConfig)
 
@@ -95,6 +108,14 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if len(bj.Spec.Caches) > 0 {
 			if cacheSelector := r.cacheNodeSelector(ctx, &bj); cacheSelector != nil {
 				for k, v := range cacheSelector {
+					nodeSelector[k] = v
+				}
+			}
+		}
+
+		if bj.Spec.Source.Type == buildv1alpha1.SourceTypePVC && bj.Spec.Source.PVC != nil {
+			if srcSelector := r.pvcNodeSelector(ctx, bj.Namespace, bj.Spec.Source.PVC.ClaimName); srcSelector != nil {
+				for k, v := range srcSelector {
 					nodeSelector[k] = v
 				}
 			}
@@ -347,6 +368,54 @@ func (r *BuildJobReconciler) cacheNodeSelector(ctx context.Context, bj *buildv1a
 	}
 	if len(selector) > 0 {
 		logger.Info("pinning pipeline to cache PV zone", "nodeSelector", selector)
+		return selector
+	}
+	return nil
+}
+
+func (r *BuildJobReconciler) validateSourcePVC(ctx context.Context, bj *buildv1alpha1.BuildJob) error {
+	if bj.Spec.Source.Type != buildv1alpha1.SourceTypePVC || bj.Spec.Source.PVC == nil {
+		return nil
+	}
+	var pvc corev1.PersistentVolumeClaim
+	if err := r.Get(ctx, client.ObjectKey{Namespace: bj.Namespace, Name: bj.Spec.Source.PVC.ClaimName}, &pvc); err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("source PVC %q not found in namespace %q", bj.Spec.Source.PVC.ClaimName, bj.Namespace)
+		}
+		return fmt.Errorf("checking source PVC: %w", err)
+	}
+	return nil
+}
+
+func (r *BuildJobReconciler) pvcNodeSelector(ctx context.Context, namespace, pvcName string) map[string]interface{} {
+	logger := log.FromContext(ctx)
+
+	var pvc corev1.PersistentVolumeClaim
+	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: pvcName}, &pvc); err != nil {
+		return nil
+	}
+	if pvc.Spec.VolumeName == "" {
+		return nil
+	}
+
+	var pv corev1.PersistentVolume
+	if err := r.Get(ctx, client.ObjectKey{Name: pvc.Spec.VolumeName}, &pv); err != nil {
+		return nil
+	}
+	if pv.Spec.NodeAffinity == nil || pv.Spec.NodeAffinity.Required == nil {
+		return nil
+	}
+
+	selector := map[string]interface{}{}
+	for _, term := range pv.Spec.NodeAffinity.Required.NodeSelectorTerms {
+		for _, expr := range term.MatchExpressions {
+			if expr.Operator == corev1.NodeSelectorOpIn && len(expr.Values) == 1 {
+				selector[expr.Key] = expr.Values[0]
+			}
+		}
+	}
+	if len(selector) > 0 {
+		logger.Info("pinning pipeline to source PVC zone", "pvc", pvcName, "nodeSelector", selector)
 		return selector
 	}
 	return nil
