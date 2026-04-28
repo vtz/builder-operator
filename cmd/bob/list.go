@@ -40,8 +40,12 @@ func newListCmd() *cobra.Command {
 				source := ""
 				revision := ""
 				if item.Source != nil {
-					source = item.Source.URL
-					revision = item.Source.Revision
+					if item.Source.Type == "pvc" {
+						source = "(local)"
+					} else {
+						source = item.Source.URL
+						revision = item.Source.Revision
+					}
 				}
 				commit := item.CommitSHA
 				if len(commit) > 8 {

@@ -17,14 +17,22 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+)
+
+const (
+	originalSourceAnnotation = "builder.sdv.cloud.redhat.com/original-source"
+	sourceTypeLabel          = "builder.sdv.cloud.redhat.com/source-type"
+	runAtAnnotation          = "builder.sdv.cloud.redhat.com/run-at"
 )
 
 func newSyncCmd() *cobra.Command {
@@ -35,20 +43,20 @@ func newSyncCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync <local-dir>",
 		Short: "Sync local source directory to a PVC on the cluster",
-		Long: `Upload your local working directory to a PersistentVolumeClaim on the cluster
-so it can be used as a PVC source for BuildJobs.
-
-This creates a temporary pod that mounts the PVC, streams your local files
-into it via kubectl/oc, then tears down the pod.
+		Long: `Upload your local working directory to a PersistentVolumeClaim on the cluster.
+Typically you don't need this directly — use "bob build --local" instead.
 
 Examples:
-  bob sync . --pvc source-code                        # sync current dir to PVC
-  bob sync ~/my-project --pvc source-code --path /src  # sync to subpath on PVC
-  bob sync . --pvc source-code -n bob-builds           # explicit namespace`,
+  bob sync .                          # sync current dir to default PVC
+  bob sync ~/my-project --pvc mypvc   # sync to a named PVC`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ns := firstNonEmpty(namespace, bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
-			return runSync(args[0], pvcName, ns, pvcPath)
+			kubecli := detectKubeClient()
+			if kubecli == "" {
+				return fmt.Errorf("no Kubernetes CLI found (install oc or kubectl)")
+			}
+			return runSync(args[0], pvcName, ns, pvcPath, kubecli)
 		},
 	}
 
@@ -68,18 +76,146 @@ func detectKubeClient() string {
 	return ""
 }
 
-func runSync(localDir, pvcName, namespace, pvcPath string) error {
+func ensurePVC(kubecli, namespace, pvcName string) error {
+	checkCmd := exec.Command(kubecli, "get", "pvc", pvcName, "-n", namespace, "-o", "name")
+	if err := checkCmd.Run(); err == nil {
+		return nil
+	}
+
+	fmt.Print("Creating PVC... ")
+	pvcManifest := fmt.Sprintf(`{
+  "apiVersion": "v1",
+  "kind": "PersistentVolumeClaim",
+  "metadata": {"name": %q, "namespace": %q},
+  "spec": {
+    "accessModes": ["ReadWriteOnce"],
+    "resources": {"requests": {"storage": "5Gi"}}
+  }
+}`, pvcName, namespace)
+	createCmd := exec.Command(kubecli, "apply", "-n", namespace, "-f", "-")
+	createCmd.Stdin = strings.NewReader(pvcManifest)
+	createCmd.Stderr = os.Stderr
+	if err := createCmd.Run(); err != nil {
+		return fmt.Errorf("creating PVC: %w", err)
+	}
+	fmt.Println("done")
+	return nil
+}
+
+func switchToPVCAndTrigger(kubecli, namespace, bjName, pvcName, pvcPath string) error {
+	fmt.Printf("\nSwitching BuildJob %s to local source...\n", bjName)
+
+	// Save the original source spec as JSON so we can restore later
+	out, err := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
+		"-o", "json").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("reading BuildJob: %w", err)
+	}
+	var bjObj map[string]interface{}
+	if err := json.Unmarshal(out, &bjObj); err != nil {
+		return fmt.Errorf("parsing BuildJob JSON: %w", err)
+	}
+	spec, _ := bjObj["spec"].(map[string]interface{})
+	sourceSpec, _ := spec["source"].(map[string]interface{})
+	sourceJSON, err := json.Marshal(sourceSpec)
+	if err != nil {
+		return fmt.Errorf("serializing source spec: %w", err)
+	}
+	originalSource := string(sourceJSON)
+
+	// Check if already has an original-source annotation (don't overwrite)
+	existing, _ := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
+		"-o", `jsonpath={.metadata.annotations.builder\.sdv\.cloud\.redhat\.com/original-source}`).CombinedOutput()
+	if len(existing) == 0 || string(existing) == "" {
+		if err := exec.Command(kubecli, "annotate", "buildjob", bjName, "-n", namespace,
+			originalSourceAnnotation+"="+originalSource, "--overwrite").Run(); err != nil {
+			return fmt.Errorf("saving original source: %w", err)
+		}
+	}
+
+	// Build the PVC source patch
+	pvcSource := map[string]interface{}{
+		"type": "pvc",
+		"pvc": map[string]interface{}{
+			"claimName": pvcName,
+			"path":      pvcPath,
+		},
+	}
+	// Clear git field explicitly
+	patch := map[string]interface{}{
+		"spec": map[string]interface{}{
+			"source": pvcSource,
+		},
+	}
+	patchJSON, _ := json.Marshal(patch)
+
+	fmt.Print("Patching source to PVC... ")
+	if err := exec.Command(kubecli, "patch", "buildjob", bjName, "-n", namespace,
+		"--type=merge", "-p", string(patchJSON)).Run(); err != nil {
+		return fmt.Errorf("patching BuildJob: %w", err)
+	}
+	fmt.Println("done")
+
+	// Label as local build
+	fmt.Print("Labeling as local build... ")
+	if err := exec.Command(kubecli, "label", "buildjob", bjName, "-n", namespace,
+		sourceTypeLabel+"=local", "--overwrite").Run(); err != nil {
+		return fmt.Errorf("labeling BuildJob: %w", err)
+	}
+	fmt.Println("done")
+
+	// Trigger the build
+	fmt.Print("Triggering build... ")
+	ts := time.Now().UTC().Format(time.RFC3339)
+	if err := exec.Command(kubecli, "annotate", "buildjob", bjName, "-n", namespace,
+		runAtAnnotation+"="+ts, "--overwrite").Run(); err != nil {
+		return fmt.Errorf("triggering build: %w", err)
+	}
+	fmt.Println("done")
+
+	fmt.Printf("\nLocal build started for %s\n", bjName)
+	fmt.Printf("  Watch progress:  bob list\n")
+	fmt.Printf("  Stream logs:     bob logs %s\n", bjName)
+	return nil
+}
+
+func restoreGitSource(kubecli, namespace, bjName string) error {
+	fmt.Printf("Restoring BuildJob %s to git source...\n", bjName)
+
+	out, err := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
+		"-o", `jsonpath={.metadata.annotations.builder\.sdv\.cloud\.redhat\.com/original-source}`).CombinedOutput()
+	if err != nil || len(out) == 0 || string(out) == "" {
+		return fmt.Errorf("no original source found; BuildJob may not have been switched to local")
+	}
+
+	patch := fmt.Sprintf(`{"spec":{"source":%s}}`, string(out))
+
+	fmt.Print("Restoring source spec... ")
+	if err := exec.Command(kubecli, "patch", "buildjob", bjName, "-n", namespace,
+		"--type=merge", "-p", patch).Run(); err != nil {
+		return fmt.Errorf("restoring source: %w", err)
+	}
+	fmt.Println("done")
+
+	// Remove the local label
+	_ = exec.Command(kubecli, "label", "buildjob", bjName, "-n", namespace,
+		sourceTypeLabel+"-").Run()
+
+	// Remove the saved annotation
+	_ = exec.Command(kubecli, "annotate", "buildjob", bjName, "-n", namespace,
+		originalSourceAnnotation+"-").Run()
+
+	fmt.Printf("BuildJob %s restored to git source.\n", bjName)
+	return nil
+}
+
+func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 	absDir, err := filepath.Abs(localDir)
 	if err != nil {
 		return fmt.Errorf("resolving source directory: %w", err)
 	}
 	if info, err := os.Stat(absDir); err != nil || !info.IsDir() {
 		return fmt.Errorf("source path is not a directory: %s", absDir)
-	}
-
-	kubecli := detectKubeClient()
-	if kubecli == "" {
-		return fmt.Errorf("no Kubernetes CLI found (install oc or kubectl)")
 	}
 
 	podName := fmt.Sprintf("bob-sync-%s", pvcName)
@@ -92,6 +228,10 @@ func runSync(localDir, pvcName, namespace, pvcPath string) error {
 	fmt.Printf("  PVC:       %s/%s\n", namespace, pvcName)
 	fmt.Printf("  Path:      %s\n", pvcPath)
 	fmt.Printf("  CLI:       %s\n\n", filepath.Base(kubecli))
+
+	if err := ensurePVC(kubecli, namespace, pvcName); err != nil {
+		return err
+	}
 
 	podManifest := fmt.Sprintf(`{
   "apiVersion": "v1",
@@ -168,15 +308,6 @@ func runSync(localDir, pvcName, namespace, pvcPath string) error {
 		return fmt.Errorf("uploading files: %w", err)
 	}
 	fmt.Printf("%d files uploaded\n", count)
-
-	fmt.Printf("\nSync complete. Use this in your BuildJob:\n")
-	fmt.Printf("  source:\n")
-	fmt.Printf("    type: pvc\n")
-	fmt.Printf("    pvc:\n")
-	fmt.Printf("      claimName: %s\n", pvcName)
-	if pvcPath != "/" {
-		fmt.Printf("      path: %s\n", pvcPath)
-	}
 
 	return nil
 }
