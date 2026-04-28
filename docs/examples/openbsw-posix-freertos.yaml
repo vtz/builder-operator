@@ -14,7 +14,7 @@ spec:
       revision: main
   target:
     platform: openbsw
-    architecture: x86
+    architecture: native
   stages:
     - name: configure
       command: "cd source && cmake --preset posix-freertos"

@@ -32,16 +32,30 @@ import (
 func newBuildCmd() *cobra.Command {
 	var file string
 	var branch string
+	var local bool
+	var sourceDir string
+	var outputDir string
 
 	cmd := &cobra.Command{
 		Use:   "build [name]",
 		Short: "Create or re-trigger a BuildJob",
 		Long: `Create a BuildJob from a YAML file or re-trigger an existing one.
 
-  bob build -f buildjob.yaml                      # create from file
+  bob build -f buildjob.yaml                      # create from file on cluster
   bob build -f buildjob.yaml --branch my-feature   # override git revision
-  bob build body-ecu-nucleo                        # re-trigger existing BuildJob`,
+  bob build body-ecu-nucleo                        # re-trigger existing BuildJob
+
+Local builds (using podman/docker on your machine):
+  bob build --local -f buildjob.yaml --source .           # build from current dir
+  bob build --local -f buildjob.yaml --source ~/body-ecu  # build from specific dir
+  bob build --local -f buildjob.yaml --output ./out       # custom output dir`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if local {
+				if file == "" {
+					return fmt.Errorf("--local requires -f <file>")
+				}
+				return runLocalBuild(file, branch, sourceDir, outputDir)
+			}
 			if file != "" {
 				return createFromFile(cmd.Context(), file, branch)
 			}
@@ -53,6 +67,9 @@ func newBuildCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "Path to BuildJob YAML file")
 	cmd.Flags().StringVar(&branch, "branch", "", "Override git revision/branch")
+	cmd.Flags().BoolVar(&local, "local", false, "Build locally using podman/docker instead of the cluster")
+	cmd.Flags().StringVar(&sourceDir, "source", ".", "Local source directory (used with --local)")
+	cmd.Flags().StringVar(&outputDir, "output", "./bob-output", "Local output directory for artifacts (used with --local)")
 	return cmd
 }
 

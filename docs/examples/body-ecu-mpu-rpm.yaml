@@ -1,0 +1,51 @@
+apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
+kind: BuildJob
+metadata:
+  name: body-ecu-mpu-rpm
+  namespace: bob-builds
+spec:
+  toolchain:
+    image: image-registry.openshift-image-registry.svc:5000/bob-builds/body-ecu:latest
+  source:
+    type: git
+    git:
+      url: https://github.com/vtz/body-ecu
+      revision: main
+  target:
+    platform: posix
+    architecture: native
+  stages:
+    - name: fetch
+      command: "west init -l source && west update"
+    - name: build
+      command: "cmake -S source/platforms/posix-mpu -B build && cmake --build build -j$(nproc)"
+    - name: package
+      command: |
+        apt-get update && apt-get install -y rpm
+        VERSION=0.1.0
+        cat > /tmp/pkg.spec << 'SPECEOF'
+        Name:     body-ecu-mpu-hostlike
+        Version:  %{rpm_version}
+        Release:  1%{?dist}
+        Summary:  Body ECU MPU host-like executable
+        License:  Apache-2.0
+        URL:      https://github.com/vtz/body-ecu
+
+        %description
+        Host-like MPU-side Body ECU for AutoSD / RHIVOS.
+        SOME/IP client bridge, cloud transport, signal bus, and CLI.
+
+        %install
+        install -Dpm 755 /workspace/build/body_ecu_posix_mpu %{buildroot}%{_bindir}/body-ecu-mpu-hostlike
+
+        %files
+        %{_bindir}/body-ecu-mpu-hostlike
+        SPECEOF
+        rpmbuild -bb /tmp/pkg.spec --define "rpm_version ${VERSION}"
+        mkdir -p /workspace/artifacts
+        cp ~/rpmbuild/RPMS/*/*.rpm /workspace/artifacts/
+        echo "=== RPM artifacts ==="
+        ls -la /workspace/artifacts/
+  artifacts:
+    destination: pvc
+    path: /workspace/artifacts

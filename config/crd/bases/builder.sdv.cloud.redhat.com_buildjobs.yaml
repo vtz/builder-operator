@@ -91,7 +91,7 @@ spec:
                       type: string
                     platform:
                       type: string
-                      enum: [zephyr, openbsw, cmake, custom]
+                      enum: [zephyr, openbsw, cmake, posix, custom]
                     architecture:
                       type: string
                       enum: [arm, riscv, xtensa, x86, native]
