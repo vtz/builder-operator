@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
 	"github.com/centos-automotive-suite/bob/internal/buildapi"
@@ -35,6 +36,8 @@ func newBuildCmd() *cobra.Command {
 	var local bool
 	var sourceDir string
 	var outputDir string
+	var pvcName string
+	var namespace string
 
 	cmd := &cobra.Command{
 		Use:   "build [name]",
@@ -44,17 +47,28 @@ func newBuildCmd() *cobra.Command {
   bob build -f buildjob.yaml                      # create from file on cluster
   bob build -f buildjob.yaml --branch my-feature   # override git revision
   bob build body-ecu-nucleo                        # re-trigger existing BuildJob
+  bob build body-ecu-mpu-hostlike --local                  # sync . and build
+  bob build body-ecu-mpu-hostlike --local --source ~/code  # sync specific dir
 
-Local builds (using podman/docker on your machine):
-  bob build --local -f buildjob.yaml --source .           # build from current dir
-  bob build --local -f buildjob.yaml --source ~/body-ecu  # build from specific dir
-  bob build --local -f buildjob.yaml --output ./out       # custom output dir`,
+When --local is used, the BuildJob is temporarily switched to use your local
+source. The next build without --local automatically restores git source.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if local {
-				if file == "" {
-					return fmt.Errorf("--local requires -f <file>")
+				if len(args) == 0 && file == "" {
+					return fmt.Errorf("--local requires a BuildJob name or -f <file>")
 				}
-				return runLocalBuild(file, branch, sourceDir, outputDir)
+				if file != "" {
+					return runLocalBuild(file, branch, sourceDir, outputDir)
+				}
+				ns := firstNonEmpty(namespace, bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
+				kubecli := detectKubeClient()
+				if kubecli == "" {
+					return fmt.Errorf("no Kubernetes CLI found (install oc or kubectl)")
+				}
+				if err := runSync(sourceDir, pvcName, ns, "/", kubecli); err != nil {
+					return err
+				}
+				return switchToPVCAndTrigger(kubecli, ns, args[0], pvcName, "/")
 			}
 			if file != "" {
 				return createFromFile(cmd.Context(), file, branch)
@@ -62,14 +76,18 @@ Local builds (using podman/docker on your machine):
 			if len(args) == 0 {
 				return fmt.Errorf("provide a BuildJob name or use -f <file>")
 			}
+			ns := firstNonEmpty(namespace, bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
+			autoRestoreIfLocal(ns, args[0])
 			return retrigger(cmd.Context(), args[0])
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "Path to BuildJob YAML file")
 	cmd.Flags().StringVar(&branch, "branch", "", "Override git revision/branch")
-	cmd.Flags().BoolVar(&local, "local", false, "Build locally using podman/docker instead of the cluster")
+	cmd.Flags().BoolVar(&local, "local", false, "Build on the cluster using local source code")
 	cmd.Flags().StringVar(&sourceDir, "source", ".", "Local source directory (used with --local)")
-	cmd.Flags().StringVar(&outputDir, "output", "./bob-output", "Local output directory for artifacts (used with --local)")
+	cmd.Flags().StringVar(&outputDir, "output", "./bob-output", "Local output directory for artifacts (used with --local -f)")
+	cmd.Flags().StringVar(&pvcName, "pvc", "source-code", "PVC name for local source upload")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Target namespace")
 	return cmd
 }
 
@@ -135,6 +153,19 @@ func createFromFile(ctx context.Context, path string, branch string) error {
 	fmt.Printf("\nWatch progress: bob list\n")
 	fmt.Printf("Stream logs:   bob logs %s\n", result.Name)
 	return nil
+}
+
+func autoRestoreIfLocal(namespace, bjName string) {
+	kubecli := detectKubeClient()
+	if kubecli == "" {
+		return
+	}
+	out, _ := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
+		"-o", `jsonpath={.metadata.annotations.builder\.sdv\.cloud\.redhat\.com/original-source}`).CombinedOutput()
+	if len(out) > 0 && string(out) != "" {
+		fmt.Print("Restoring git source... ")
+		_ = restoreGitSource(kubecli, namespace, bjName)
+	}
 }
 
 func retrigger(ctx context.Context, name string) error {
