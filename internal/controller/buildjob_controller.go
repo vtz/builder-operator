@@ -86,11 +86,23 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		runN := r.nextRunNumber(ctx, &bj)
 		pipelineRun := tekton.BuildPipelineRunWithConfig(&bj, runN, r.PipelineConfig)
 
+		nodeSelector := map[string]interface{}{}
+
+		if k8sArch := archToK8s(bj.Spec.Target.Architecture); k8sArch != "" {
+			nodeSelector["kubernetes.io/arch"] = k8sArch
+		}
+
 		if len(bj.Spec.Caches) > 0 {
-			if nodeSelector := r.cacheNodeSelector(ctx, &bj); nodeSelector != nil {
-				if err := unstructured.SetNestedField(pipelineRun.Object, nodeSelector, "spec", "taskRunTemplate", "podTemplate", "nodeSelector"); err != nil {
-					logger.Error(err, "failed to set nodeSelector for cache affinity")
+			if cacheSelector := r.cacheNodeSelector(ctx, &bj); cacheSelector != nil {
+				for k, v := range cacheSelector {
+					nodeSelector[k] = v
 				}
+			}
+		}
+
+		if len(nodeSelector) > 0 {
+			if err := unstructured.SetNestedField(pipelineRun.Object, nodeSelector, "spec", "taskRunTemplate", "podTemplate", "nodeSelector"); err != nil {
+				logger.Error(err, "failed to set nodeSelector")
 			}
 		}
 		if err := ctrl.SetControllerReference(&bj, pipelineRun, r.Scheme); err != nil {
@@ -286,6 +298,20 @@ func (r *BuildJobReconciler) nextRunNumber(ctx context.Context, bj *buildv1alpha
 		n = bj.Status.RunCount + 1
 	}
 	return n
+}
+
+// archToK8s maps BuildJob architecture values to Kubernetes node label values.
+func archToK8s(arch string) string {
+	switch arch {
+	case "arm":
+		return "arm64"
+	case "x86":
+		return "amd64"
+	case "native":
+		return ""
+	default:
+		return ""
+	}
 }
 
 // cacheNodeSelector returns a nodeSelector map that pins pods to the same

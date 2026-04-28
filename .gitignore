@@ -1,7 +1,9 @@
 bin/
+/bob
 deployment/
 dist/
 out/
+out_*
 main
 coverage.out
 .DS_Store

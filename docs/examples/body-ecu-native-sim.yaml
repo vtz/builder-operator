@@ -1,7 +1,7 @@
 apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
 kind: BuildJob
 metadata:
-  name: body-ecu-nucleo
+  name: body-ecu-native-sim
   namespace: bob-builds
 spec:
   toolchain:
@@ -12,9 +12,9 @@ spec:
       url: https://github.com/vtz/body-ecu
       revision: main
   target:
-    board: nucleo_h755zi_q/stm32h755xx/m7
+    board: native_sim/native/64
     platform: zephyr
-    architecture: arm
+    architecture: native
   stages:
     - name: fetch
       command: "west init -l source && west update"

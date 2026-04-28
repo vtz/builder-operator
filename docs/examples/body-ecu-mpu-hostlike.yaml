@@ -1,7 +1,7 @@
 apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
 kind: BuildJob
 metadata:
-  name: body-ecu-nucleo
+  name: body-ecu-mpu-hostlike
   namespace: bob-builds
 spec:
   toolchain:
@@ -12,19 +12,17 @@ spec:
       url: https://github.com/vtz/body-ecu
       revision: main
   target:
-    board: nucleo_h755zi_q/stm32h755xx/m7
-    platform: zephyr
-    architecture: arm
+    platform: posix
+    architecture: x86
   stages:
     - name: fetch
       command: "west init -l source && west update"
     - name: build
-      command: "west build -b ${BOB_BOARD} source/app"
+      command: "cmake -S source/platforms/posix-mpu -B build && cmake --build build -j$(nproc)"
     - name: package
       command: >-
-        mkdir -p /workspace/artifacts/firmware /workspace/artifacts/renode &&
-        cp build/artifacts/firmware/* /workspace/artifacts/firmware/ &&
-        cp build/artifacts/renode/* /workspace/artifacts/renode/
+        mkdir -p /workspace/artifacts &&
+        cp build/body_ecu_posix_mpu /workspace/artifacts/
   artifacts:
     destination: pvc
     path: /workspace/artifacts
