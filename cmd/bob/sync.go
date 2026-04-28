@@ -227,6 +227,16 @@ func buildJobArch(kubecli, namespace, bjName string) string {
 	}
 }
 
+func cleanupSyncPod(kubecli, namespace, pvcName string) {
+	podName := fmt.Sprintf("bob-sync-%s", pvcName)
+	fmt.Print("Releasing PVC (deleting sync pod)... ")
+	cmd := exec.Command(kubecli, "delete", "pod", podName, "-n", namespace,
+		"--ignore-not-found", "--grace-period=0", "--force")
+	cmd.Stderr = os.Stderr
+	_ = cmd.Run()
+	fmt.Println("done")
+}
+
 func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 	return runSyncWithArch(localDir, pvcName, namespace, pvcPath, kubecli, "")
 }

@@ -68,6 +68,7 @@ source. The next build without --local automatically restores git source.`,
 				if err := runSyncWithArch(sourceDir, pvcName, ns, "/", kubecli, arch); err != nil {
 					return err
 				}
+				cleanupSyncPod(kubecli, ns, pvcName)
 				return switchToPVCAndTrigger(kubecli, ns, args[0], pvcName, "/")
 			}
 			if file != "" {
