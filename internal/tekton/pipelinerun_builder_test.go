@@ -15,6 +15,7 @@
 package tekton
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -330,6 +331,11 @@ func TestBuildPipelineRun_GitCloneTask(t *testing.T) {
 	if result["name"] != "commit-sha" {
 		t.Fatalf("expected result name commit-sha, got %v", result["name"])
 	}
+
+	img := step["image"].(string)
+	if img != GitCloneImage {
+		t.Fatalf("clone step should use GitCloneImage (%s), got %s", GitCloneImage, img)
+	}
 }
 
 func TestBuildPipelineRun_PipelineLevelCommitSHAResult(t *testing.T) {
@@ -357,9 +363,12 @@ func TestBuildPipelineRun_PipelineLevelCommitSHAResult(t *testing.T) {
 
 func TestBuildPipelineRun_NoPipelineResultForPVC(t *testing.T) {
 	bj := &buildv1alpha1.BuildJob{
-		ObjectMeta: metav1.ObjectMeta{Name: "pvc-build", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-build-noresult", Namespace: "default"},
 		Spec: buildv1alpha1.BuildJobSpec{
-			Source: buildv1alpha1.SourceSpec{Type: buildv1alpha1.SourceTypePVC},
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypePVC,
+				PVC:  &buildv1alpha1.PVCSource{ClaimName: "my-source"},
+			},
 			Stages: []buildv1alpha1.NamedStage{{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}}},
 		},
 	}
@@ -426,9 +435,9 @@ func TestBuildPipelineRun_WithCacheVolumes(t *testing.T) {
 	}
 }
 
-func TestBuildPipelineRun_NoGitSourceSkipsClone(t *testing.T) {
+func TestBuildPipelineRun_PVCSourceNoPVCSpec_SkipsClone(t *testing.T) {
 	bj := &buildv1alpha1.BuildJob{
-		ObjectMeta: metav1.ObjectMeta{Name: "pvc-build", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-build-nopvc", Namespace: "default"},
 		Spec: buildv1alpha1.BuildJobSpec{
 			Source: buildv1alpha1.SourceSpec{Type: buildv1alpha1.SourceTypePVC},
 			Stages: []buildv1alpha1.NamedStage{
@@ -439,11 +448,136 @@ func TestBuildPipelineRun_NoGitSourceSkipsClone(t *testing.T) {
 	pr := BuildPipelineRun(bj)
 	tasks := getPipelineTasks(t, pr)
 	if len(tasks) != 1 {
-		t.Fatalf("expected 1 task (no clone), got %d", len(tasks))
+		t.Fatalf("expected 1 task (no copy-source when PVC spec is nil), got %d", len(tasks))
 	}
 	first := tasks[0].(map[string]interface{})
 	if first["name"] != "build" {
 		t.Fatalf("expected first task to be build, got %s", first["name"])
+	}
+}
+
+func TestBuildPipelineRun_PVCSourceCopyTask(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-build", Namespace: "default"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypePVC,
+				PVC:  &buildv1alpha1.PVCSource{ClaimName: "source-code", Path: "/src"},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks (copy-source + build), got %d", len(tasks))
+	}
+
+	copyTask := tasks[0].(map[string]interface{})
+	if copyTask["name"] != "copy-source" {
+		t.Fatalf("expected first task to be copy-source, got %s", copyTask["name"])
+	}
+
+	taskSpec := copyTask["taskSpec"].(map[string]interface{})
+
+	volumes := taskSpec["volumes"].([]interface{})
+	if len(volumes) != 1 {
+		t.Fatalf("expected 1 volume for PVC source, got %d", len(volumes))
+	}
+	vol := volumes[0].(map[string]interface{})
+	if vol["name"] != "pvc-source" {
+		t.Fatalf("expected volume name pvc-source, got %v", vol["name"])
+	}
+	pvcSpec := vol["persistentVolumeClaim"].(map[string]interface{})
+	if pvcSpec["claimName"] != "source-code" {
+		t.Fatalf("expected claimName source-code, got %v", pvcSpec["claimName"])
+	}
+	if pvcSpec["readOnly"] != true {
+		t.Fatal("expected PVC source to be mounted read-only")
+	}
+
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	mounts := step["volumeMounts"].([]interface{})
+	if len(mounts) != 1 {
+		t.Fatalf("expected 1 volume mount, got %d", len(mounts))
+	}
+	mount := mounts[0].(map[string]interface{})
+	if mount["mountPath"] != "/mnt/pvc-source" {
+		t.Fatalf("expected mountPath /mnt/pvc-source, got %v", mount["mountPath"])
+	}
+
+	script := step["script"].(string)
+	if !strings.Contains(script, "/mnt/pvc-source/src/") {
+		t.Fatalf("expected script to reference PVC path /src, got:\n%s", script)
+	}
+}
+
+func TestBuildPipelineRun_PVCSourceRunAfterChaining(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-chain", Namespace: "default"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypePVC,
+				PVC:  &buildv1alpha1.PVCSource{ClaimName: "my-source"},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+				{Name: "test", StageSpec: buildv1alpha1.StageSpec{Command: "make test"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	if len(tasks) != 3 {
+		t.Fatalf("expected 3 tasks, got %d", len(tasks))
+	}
+
+	copyTask := tasks[0].(map[string]interface{})
+	if _, has := copyTask["runAfter"]; has {
+		t.Fatal("copy-source should not have runAfter")
+	}
+
+	buildTask := tasks[1].(map[string]interface{})
+	runAfter := buildTask["runAfter"].([]interface{})
+	if runAfter[0] != "copy-source" {
+		t.Fatalf("build should runAfter copy-source, got %v", runAfter)
+	}
+
+	testTask := tasks[2].(map[string]interface{})
+	testRunAfter := testTask["runAfter"].([]interface{})
+	if testRunAfter[0] != "build" {
+		t.Fatalf("test should runAfter build, got %v", testRunAfter)
+	}
+}
+
+func TestBuildPipelineRun_PVCSourceDefaultPath(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "pvc-default-path", Namespace: "default"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypePVC,
+				PVC:  &buildv1alpha1.PVCSource{ClaimName: "my-source"},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+	copyTask := tasks[0].(map[string]interface{})
+	taskSpec := copyTask["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	script := step["script"].(string)
+
+	if !strings.Contains(script, "/mnt/pvc-source/") {
+		t.Fatalf("expected script to copy from PVC root, got:\n%s", script)
 	}
 }
 

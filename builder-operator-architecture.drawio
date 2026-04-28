@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" modified="2026-02-07T12:00:00.000Z" agent="Draw.io" version="24.0.0" type="device">
+<mxfile host="65bd71144e">
     <diagram id="operator-arch" name="1 - Builder Operator Architecture">
-        <mxGraphModel dx="939" dy="787" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+        <mxGraphModel dx="881" dy="544" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -116,10 +116,10 @@
                     <mxGeometry x="555" y="265" width="100" height="35" as="geometry"/>
                 </mxCell>
                 <mxCell id="oa_c_prov" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#707070;" parent="1" vertex="1">
-                    <mxGeometry x="440" y="310" width="215" height="12" as="geometry"/>
+                    <mxGeometry x="440" y="310" width="215" height="16" as="geometry"/>
                 </mxCell>
                 <mxCell id="oa_c_prov_l" value="&lt;b&gt;7. Provenance&lt;/b&gt; (SLSA L3)" style="text;html=1;fontSize=8;fontFamily=Red Hat Text;fontColor=#151515;align=center;" parent="1" vertex="1">
-                    <mxGeometry x="440" y="308" width="215" height="16" as="geometry"/>
+                    <mxGeometry x="435" y="307" width="215" height="16" as="geometry"/>
                 </mxCell>
                 <mxCell id="oa_strategies" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#EE0000;strokeWidth=2;dashed=1;dashPattern=8 8;" parent="1" vertex="1">
                     <mxGeometry x="420" y="360" width="520" height="230" as="geometry"/>
@@ -233,7 +233,7 @@
         </mxGraphModel>
     </diagram>
     <diagram id="rhas-extended" name="2 - RHAS Extended — Three Operators">
-        <mxGraphModel dx="853" dy="787" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
+        <mxGraphModel dx="881" dy="544" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" background="#ffffff" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>

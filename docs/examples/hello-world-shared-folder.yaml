@@ -10,16 +10,31 @@ spec:
     type: pvc
     pvc:
       claimName: source-code
+      # path: /           # optional: subdirectory within the PVC (default: /)
   target:
     platform: cmake
     architecture: native
   stages:
+    # PVC contents are copied to $(workspaces.ws.path)/source/ before stages run.
+    # Use cd source/ or reference source/ paths in your commands.
     - name: build
-      command: "g++ /workspace/hello.cpp -o /workspace/bin/hello-world"
+      command: |
+        cd source
+        mkdir -p /workspace/bin
+        g++ hello.cpp -o /workspace/bin/hello-world
     - name: test
       command: "/workspace/bin/hello-world"
     - name: package
-      command: "cp /workspace/bin/hello-world /workspace/artifacts/"
+      command: |
+        mkdir -p /workspace/artifacts
+        cp /workspace/bin/hello-world /workspace/artifacts/
   artifacts:
     destination: pvc
     path: /workspace/artifacts
+# Usage:
+#   1. Sync your local source to the PVC:
+#        bob sync ./my-project --pvc source-code
+#   2. Submit the build:
+#        bob build -f hello-world-shared-folder.yaml
+#   3. Watch logs:
+#        bob logs hello-world-shared-folder

@@ -1,0 +1,262 @@
+// Copyright 2026 Red Hat Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package main
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/spf13/cobra"
+)
+
+func newSyncCmd() *cobra.Command {
+	var pvcName string
+	var namespace string
+	var pvcPath string
+
+	cmd := &cobra.Command{
+		Use:   "sync <local-dir>",
+		Short: "Sync local source directory to a PVC on the cluster",
+		Long: `Upload your local working directory to a PersistentVolumeClaim on the cluster
+so it can be used as a PVC source for BuildJobs.
+
+This creates a temporary pod that mounts the PVC, streams your local files
+into it via kubectl/oc, then tears down the pod.
+
+Examples:
+  bob sync . --pvc source-code                        # sync current dir to PVC
+  bob sync ~/my-project --pvc source-code --path /src  # sync to subpath on PVC
+  bob sync . --pvc source-code -n bob-builds           # explicit namespace`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ns := firstNonEmpty(namespace, bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
+			return runSync(args[0], pvcName, ns, pvcPath)
+		},
+	}
+
+	cmd.Flags().StringVar(&pvcName, "pvc", "source-code", "Name of the target PVC")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Target namespace (defaults to BOB_NAMESPACE or bob-builds)")
+	cmd.Flags().StringVar(&pvcPath, "path", "/", "Target path within the PVC")
+	return cmd
+}
+
+func detectKubeClient() string {
+	if p, err := exec.LookPath("oc"); err == nil {
+		return p
+	}
+	if p, err := exec.LookPath("kubectl"); err == nil {
+		return p
+	}
+	return ""
+}
+
+func runSync(localDir, pvcName, namespace, pvcPath string) error {
+	absDir, err := filepath.Abs(localDir)
+	if err != nil {
+		return fmt.Errorf("resolving source directory: %w", err)
+	}
+	if info, err := os.Stat(absDir); err != nil || !info.IsDir() {
+		return fmt.Errorf("source path is not a directory: %s", absDir)
+	}
+
+	kubecli := detectKubeClient()
+	if kubecli == "" {
+		return fmt.Errorf("no Kubernetes CLI found (install oc or kubectl)")
+	}
+
+	podName := fmt.Sprintf("bob-sync-%s", pvcName)
+	if pvcPath == "" {
+		pvcPath = "/"
+	}
+
+	fmt.Printf("Syncing local source to cluster PVC\n")
+	fmt.Printf("  Source:    %s\n", absDir)
+	fmt.Printf("  PVC:       %s/%s\n", namespace, pvcName)
+	fmt.Printf("  Path:      %s\n", pvcPath)
+	fmt.Printf("  CLI:       %s\n\n", filepath.Base(kubecli))
+
+	podManifest := fmt.Sprintf(`{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {"name": %q, "namespace": %q, "labels": {"app.kubernetes.io/managed-by": "bob"}},
+  "spec": {
+    "restartPolicy": "Never",
+    "containers": [{
+      "name": "sync",
+      "image": "busybox:latest",
+      "command": ["sh", "-c", "echo ready && sleep 3600"],
+      "volumeMounts": [{"name": "source", "mountPath": "/mnt/pvc"}]
+    }],
+    "volumes": [{"name": "source", "persistentVolumeClaim": {"claimName": %q}}]
+  }
+}`, podName, namespace, pvcName)
+
+	fmt.Print("Creating sync pod... ")
+	applyCmd := exec.Command(kubecli, "apply", "-n", namespace, "-f", "-")
+	applyCmd.Stdin = strings.NewReader(podManifest)
+	applyCmd.Stderr = os.Stderr
+	if err := applyCmd.Run(); err != nil {
+		return fmt.Errorf("creating sync pod: %w", err)
+	}
+	fmt.Println("done")
+
+	defer func() {
+		fmt.Print("Cleaning up sync pod... ")
+		delCmd := exec.Command(kubecli, "delete", "pod", podName, "-n", namespace, "--ignore-not-found", "--wait=false")
+		delCmd.Stderr = os.Stderr
+		_ = delCmd.Run()
+		fmt.Println("done")
+	}()
+
+	fmt.Print("Waiting for pod to be ready... ")
+	waitCmd := exec.Command(kubecli, "wait", "--for=condition=Ready", "pod/"+podName, "-n", namespace, "--timeout=120s")
+	waitCmd.Stderr = os.Stderr
+	if err := waitCmd.Run(); err != nil {
+		return fmt.Errorf("waiting for sync pod: %w", err)
+	}
+	fmt.Println("ready")
+
+	destPath := filepath.Join("/mnt/pvc", pvcPath)
+
+	fmt.Print("Clearing target path... ")
+	clearCmd := exec.Command(kubecli, "exec", podName, "-n", namespace, "--", "sh", "-c",
+		fmt.Sprintf("rm -rf %s/* %s/.[!.]* 2>/dev/null; mkdir -p %s", destPath, destPath, destPath))
+	clearCmd.Stderr = os.Stderr
+	if err := clearCmd.Run(); err != nil {
+		return fmt.Errorf("clearing target path: %w", err)
+	}
+	fmt.Println("done")
+
+	fmt.Print("Uploading files... ")
+	cpCmd := exec.Command(kubecli, "exec", "-i", podName, "-n", namespace, "--", "tar", "xzf", "-", "-C", destPath)
+	cpCmd.Stderr = os.Stderr
+
+	stdin, err := cpCmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("creating stdin pipe: %w", err)
+	}
+
+	if err := cpCmd.Start(); err != nil {
+		return fmt.Errorf("starting tar extract: %w", err)
+	}
+
+	count, err := tarDirectory(absDir, stdin)
+	stdin.Close()
+	if err != nil {
+		return fmt.Errorf("creating tar archive: %w", err)
+	}
+
+	if err := cpCmd.Wait(); err != nil {
+		return fmt.Errorf("uploading files: %w", err)
+	}
+	fmt.Printf("%d files uploaded\n", count)
+
+	fmt.Printf("\nSync complete. Use this in your BuildJob:\n")
+	fmt.Printf("  source:\n")
+	fmt.Printf("    type: pvc\n")
+	fmt.Printf("    pvc:\n")
+	fmt.Printf("      claimName: %s\n", pvcName)
+	if pvcPath != "/" {
+		fmt.Printf("      path: %s\n", pvcPath)
+	}
+
+	return nil
+}
+
+func tarDirectory(dir string, w io.Writer) (int, error) {
+	gw := gzip.NewWriter(w)
+	tw := tar.NewWriter(gw)
+	count := 0
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+
+		if shouldSkipPath(rel) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = rel
+
+		if info.Mode()&os.ModeSymlink != 0 {
+			link, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			header.Linkname = link
+		}
+
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(tw, f)
+		f.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		count++
+		return nil
+	})
+	if err != nil {
+		return count, err
+	}
+
+	if err := tw.Close(); err != nil {
+		return count, err
+	}
+	return count, gw.Close()
+}
+
+func shouldSkipPath(rel string) bool {
+	skip := []string{".git", "node_modules", "__pycache__", ".tox", ".venv", "build", ".bob-output"}
+	base := filepath.Base(rel)
+	for _, s := range skip {
+		if base == s {
+			return true
+		}
+	}
+	return false
+}
