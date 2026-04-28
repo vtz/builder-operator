@@ -211,7 +211,27 @@ func restoreGitSource(kubecli, namespace, bjName string) error {
 
 var syncExcludes = []string{".git", "node_modules", "__pycache__", ".tox", ".venv", "build", ".bob-output"}
 
+func buildJobArch(kubecli, namespace, bjName string) string {
+	out, err := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
+		"-o", "jsonpath={.spec.target.architecture}").CombinedOutput()
+	if err != nil || len(out) == 0 {
+		return ""
+	}
+	switch string(out) {
+	case "arm":
+		return "arm64"
+	case "x86":
+		return "amd64"
+	default:
+		return ""
+	}
+}
+
 func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
+	return runSyncWithArch(localDir, pvcName, namespace, pvcPath, kubecli, "")
+}
+
+func runSyncWithArch(localDir, pvcName, namespace, pvcPath, kubecli, nodeArch string) error {
 	absDir, err := filepath.Abs(localDir)
 	if err != nil {
 		return fmt.Errorf("resolving source directory: %w", err)
@@ -234,10 +254,14 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 	fmt.Printf("  Path:       %s\n", pvcPath)
 	fmt.Printf("  CLI:        %s\n", cli)
 	if useRsync {
-		fmt.Printf("  Strategy:   rsync (incremental)\n\n")
+		fmt.Printf("  Strategy:   rsync (incremental)\n")
 	} else {
-		fmt.Printf("  Strategy:   tar (full upload)\n\n")
+		fmt.Printf("  Strategy:   tar (full upload)\n")
 	}
+	if nodeArch != "" {
+		fmt.Printf("  Node arch:  %s\n", nodeArch)
+	}
+	fmt.Println()
 
 	if err := ensurePVC(kubecli, namespace, pvcName); err != nil {
 		return err
@@ -250,7 +274,7 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 		syncCmd = "echo ready && sleep 3600"
 	}
 
-	if err := ensureSyncPod(kubecli, namespace, podName, syncImage, syncCmd, pvcName); err != nil {
+	if err := ensureSyncPod(kubecli, namespace, podName, syncImage, syncCmd, pvcName, nodeArch); err != nil {
 		return err
 	}
 
@@ -262,7 +286,7 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 	return tarUpload(kubecli, podName, namespace, absDir, destPath)
 }
 
-func ensureSyncPod(kubecli, namespace, podName, image, cmd, pvcName string) error {
+func ensureSyncPod(kubecli, namespace, podName, image, cmd, pvcName, nodeArch string) error {
 	// Check if pod already exists and is Ready
 	phase, _ := exec.Command(kubecli, "get", "pod", podName, "-n", namespace,
 		"-o", "jsonpath={.status.phase}").CombinedOutput()
@@ -283,12 +307,17 @@ func ensureSyncPod(kubecli, namespace, podName, image, cmd, pvcName string) erro
 		fmt.Println("done")
 	}
 
+	nodeSelectorJSON := ""
+	if nodeArch != "" {
+		nodeSelectorJSON = fmt.Sprintf(`, "nodeSelector": {"kubernetes.io/arch": %q}`, nodeArch)
+	}
+
 	podManifest := fmt.Sprintf(`{
   "apiVersion": "v1",
   "kind": "Pod",
   "metadata": {"name": %q, "namespace": %q, "labels": {"app.kubernetes.io/managed-by": "bob"}},
   "spec": {
-    "restartPolicy": "Never",
+    "restartPolicy": "Never"%s,
     "containers": [{
       "name": "sync",
       "image": %q,
@@ -297,7 +326,7 @@ func ensureSyncPod(kubecli, namespace, podName, image, cmd, pvcName string) erro
     }],
     "volumes": [{"name": "source", "persistentVolumeClaim": {"claimName": %q}}]
   }
-}`, podName, namespace, image, cmd, pvcName)
+}`, podName, namespace, nodeSelectorJSON, image, cmd, pvcName)
 
 	fmt.Print("Creating sync pod... ")
 	applyCmd := exec.Command(kubecli, "create", "-n", namespace, "-f", "-")
