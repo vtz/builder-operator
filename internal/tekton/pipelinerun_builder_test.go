@@ -331,6 +331,11 @@ func TestBuildPipelineRun_GitCloneTask(t *testing.T) {
 	if result["name"] != "commit-sha" {
 		t.Fatalf("expected result name commit-sha, got %v", result["name"])
 	}
+
+	img := step["image"].(string)
+	if img != GitCloneImage {
+		t.Fatalf("clone step should use GitCloneImage (%s), got %s", GitCloneImage, img)
+	}
 }
 
 func TestBuildPipelineRun_PipelineLevelCommitSHAResult(t *testing.T) {

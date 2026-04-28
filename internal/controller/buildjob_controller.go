@@ -141,6 +141,7 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		bj.Status.Phase = buildv1alpha1.PhasePending
 		bj.Status.LastRunAt = bj.Annotations[runAtAnnotation]
 		bj.Status.FailureReason = ""
+		bj.Status.CommitSHA = ""
 		bj.Status.Conditions = mergeCondition(
 			bj.Status.Conditions,
 			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunCreated", "PipelineRun created for BuildJob", bj.Generation),

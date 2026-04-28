@@ -25,6 +25,7 @@ import (
 const (
 	TektonAPIVersion = "tekton.dev/v1"
 	PipelineRunKind  = "PipelineRun"
+	GitCloneImage    = "alpine/git:latest"
 )
 
 type PipelineConfig struct {
@@ -65,15 +66,15 @@ func BuildPipelineRunWithConfig(bj *buildv1alpha1.BuildJob, runN int64, cfg Pipe
 		if rev == "" {
 			rev = "main"
 		}
-		cloneScript := fmt.Sprintf(`#!/usr/bin/env bash
-set -euo pipefail
+		cloneScript := fmt.Sprintf(`#!/bin/sh
+set -eu
 cd $(workspaces.ws.path)
 git clone %s source
 cd source
 git checkout %s
 git rev-parse HEAD > $(results.commit-sha.path)
 `, shellQuote(bj.Spec.Source.Git.URL), shellQuote(rev))
-		cloneTask := buildCloneTaskSpec("clone", image, cloneScript, envVars)
+		cloneTask := buildCloneTaskSpec("clone", GitCloneImage, cloneScript, envVars)
 		tasks = append(tasks, cloneTask)
 		prevStage = "clone"
 
