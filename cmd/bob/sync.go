@@ -246,8 +246,8 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 	syncImage := "busybox:latest"
 	syncCmd := "echo ready && sleep 3600"
 	if useRsync {
-		syncImage = "alpine:latest"
-		syncCmd = "apk add --no-cache rsync >/dev/null 2>&1 && echo ready && sleep 3600"
+		syncImage = "instrumentisto/rsync-ssh:latest"
+		syncCmd = "echo ready && sleep 3600"
 	}
 
 	if err := ensureSyncPod(kubecli, namespace, podName, syncImage, syncCmd, pvcName); err != nil {
