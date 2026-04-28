@@ -209,6 +209,8 @@ func restoreGitSource(kubecli, namespace, bjName string) error {
 	return nil
 }
 
+var syncExcludes = []string{".git", "node_modules", "__pycache__", ".tox", ".venv", "build", ".bob-output"}
+
 func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 	absDir, err := filepath.Abs(localDir)
 	if err != nil {
@@ -223,14 +225,62 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 		pvcPath = "/"
 	}
 
+	cli := filepath.Base(kubecli)
+	useRsync := cli == "oc"
+
 	fmt.Printf("Syncing local source to cluster PVC\n")
-	fmt.Printf("  Source:    %s\n", absDir)
-	fmt.Printf("  PVC:       %s/%s\n", namespace, pvcName)
-	fmt.Printf("  Path:      %s\n", pvcPath)
-	fmt.Printf("  CLI:       %s\n\n", filepath.Base(kubecli))
+	fmt.Printf("  Source:     %s\n", absDir)
+	fmt.Printf("  PVC:        %s/%s\n", namespace, pvcName)
+	fmt.Printf("  Path:       %s\n", pvcPath)
+	fmt.Printf("  CLI:        %s\n", cli)
+	if useRsync {
+		fmt.Printf("  Strategy:   rsync (incremental)\n\n")
+	} else {
+		fmt.Printf("  Strategy:   tar (full upload)\n\n")
+	}
 
 	if err := ensurePVC(kubecli, namespace, pvcName); err != nil {
 		return err
+	}
+
+	syncImage := "busybox:latest"
+	syncCmd := "echo ready && sleep 3600"
+	if useRsync {
+		syncImage = "alpine:latest"
+		syncCmd = "apk add --no-cache rsync >/dev/null 2>&1 && echo ready && sleep 3600"
+	}
+
+	if err := ensureSyncPod(kubecli, namespace, podName, syncImage, syncCmd, pvcName); err != nil {
+		return err
+	}
+
+	destPath := filepath.Join("/mnt/pvc", pvcPath)
+
+	if useRsync {
+		return rsyncUpload(kubecli, podName, namespace, absDir, destPath)
+	}
+	return tarUpload(kubecli, podName, namespace, absDir, destPath)
+}
+
+func ensureSyncPod(kubecli, namespace, podName, image, cmd, pvcName string) error {
+	// Check if pod already exists and is Ready
+	phase, _ := exec.Command(kubecli, "get", "pod", podName, "-n", namespace,
+		"-o", "jsonpath={.status.phase}").CombinedOutput()
+
+	switch string(phase) {
+	case "Running":
+		fmt.Println("Reusing existing sync pod")
+		return nil
+	case "":
+		// Pod doesn't exist, create it
+	default:
+		// Pod exists but not running (Pending, Terminating, Failed, etc.) -- delete and recreate
+		fmt.Print("Removing stale sync pod... ")
+		delCmd := exec.Command(kubecli, "delete", "pod", podName, "-n", namespace,
+			"--ignore-not-found", "--grace-period=0", "--force")
+		delCmd.Stderr = os.Stderr
+		_ = delCmd.Run()
+		fmt.Println("done")
 	}
 
 	podManifest := fmt.Sprintf(`{
@@ -241,30 +291,22 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
     "restartPolicy": "Never",
     "containers": [{
       "name": "sync",
-      "image": "busybox:latest",
-      "command": ["sh", "-c", "echo ready && sleep 3600"],
+      "image": %q,
+      "command": ["sh", "-c", %q],
       "volumeMounts": [{"name": "source", "mountPath": "/mnt/pvc"}]
     }],
     "volumes": [{"name": "source", "persistentVolumeClaim": {"claimName": %q}}]
   }
-}`, podName, namespace, pvcName)
+}`, podName, namespace, image, cmd, pvcName)
 
 	fmt.Print("Creating sync pod... ")
-	applyCmd := exec.Command(kubecli, "apply", "-n", namespace, "-f", "-")
+	applyCmd := exec.Command(kubecli, "create", "-n", namespace, "-f", "-")
 	applyCmd.Stdin = strings.NewReader(podManifest)
 	applyCmd.Stderr = os.Stderr
 	if err := applyCmd.Run(); err != nil {
 		return fmt.Errorf("creating sync pod: %w", err)
 	}
 	fmt.Println("done")
-
-	defer func() {
-		fmt.Print("Cleaning up sync pod... ")
-		delCmd := exec.Command(kubecli, "delete", "pod", podName, "-n", namespace, "--ignore-not-found", "--wait=false")
-		delCmd.Stderr = os.Stderr
-		_ = delCmd.Run()
-		fmt.Println("done")
-	}()
 
 	fmt.Print("Waiting for pod to be ready... ")
 	waitCmd := exec.Command(kubecli, "wait", "--for=condition=Ready", "pod/"+podName, "-n", namespace, "--timeout=120s")
@@ -273,9 +315,43 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 		return fmt.Errorf("waiting for sync pod: %w", err)
 	}
 	fmt.Println("ready")
+	return nil
+}
 
-	destPath := filepath.Join("/mnt/pvc", pvcPath)
+func rsyncUpload(kubecli, podName, namespace, srcDir, destPath string) error {
+	fmt.Print("Ensuring target directory... ")
+	mkdirCmd := exec.Command(kubecli, "exec", podName, "-n", namespace, "--",
+		"mkdir", "-p", destPath)
+	mkdirCmd.Stderr = os.Stderr
+	if err := mkdirCmd.Run(); err != nil {
+		return fmt.Errorf("creating target directory: %w", err)
+	}
+	fmt.Println("done")
 
+	// Trailing slash on source tells oc rsync to sync contents, not the directory itself
+	src := srcDir
+	if !strings.HasSuffix(src, "/") {
+		src += "/"
+	}
+	dest := fmt.Sprintf("%s:%s", podName, destPath)
+
+	args := []string{"rsync", "--delete", "--no-perms", "-n", namespace}
+	for _, ex := range syncExcludes {
+		args = append(args, fmt.Sprintf("--exclude=%s", ex))
+	}
+	args = append(args, src, dest)
+
+	fmt.Print("Syncing files (rsync)... ")
+	rsyncCmd := exec.Command(kubecli, args...)
+	rsyncCmd.Stderr = os.Stderr
+	if err := rsyncCmd.Run(); err != nil {
+		return fmt.Errorf("rsync upload: %w", err)
+	}
+	fmt.Println("done")
+	return nil
+}
+
+func tarUpload(kubecli, podName, namespace, srcDir, destPath string) error {
 	fmt.Print("Clearing target path... ")
 	clearCmd := exec.Command(kubecli, "exec", podName, "-n", namespace, "--", "sh", "-c",
 		fmt.Sprintf("rm -rf %s/* %s/.[!.]* 2>/dev/null; mkdir -p %s", destPath, destPath, destPath))
@@ -285,7 +361,7 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 	}
 	fmt.Println("done")
 
-	fmt.Print("Uploading files... ")
+	fmt.Print("Uploading files (tar)... ")
 	cpCmd := exec.Command(kubecli, "exec", "-i", podName, "-n", namespace, "--", "tar", "xzf", "-", "-C", destPath)
 	cpCmd.Stderr = os.Stderr
 
@@ -298,7 +374,7 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 		return fmt.Errorf("starting tar extract: %w", err)
 	}
 
-	count, err := tarDirectory(absDir, stdin)
+	count, err := tarDirectory(srcDir, stdin)
 	stdin.Close()
 	if err != nil {
 		return fmt.Errorf("creating tar archive: %w", err)
@@ -308,7 +384,6 @@ func runSync(localDir, pvcName, namespace, pvcPath, kubecli string) error {
 		return fmt.Errorf("uploading files: %w", err)
 	}
 	fmt.Printf("%d files uploaded\n", count)
-
 	return nil
 }
 
@@ -382,9 +457,8 @@ func tarDirectory(dir string, w io.Writer) (int, error) {
 }
 
 func shouldSkipPath(rel string) bool {
-	skip := []string{".git", "node_modules", "__pycache__", ".tox", ".venv", "build", ".bob-output"}
 	base := filepath.Base(rel)
-	for _, s := range skip {
+	for _, s := range syncExcludes {
 		if base == s {
 			return true
 		}
