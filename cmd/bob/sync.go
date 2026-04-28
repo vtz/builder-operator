@@ -293,12 +293,21 @@ func ensureSyncPod(kubecli, namespace, podName, image, cmd, pvcName, nodeArch st
 
 	switch string(phase) {
 	case "Running":
-		fmt.Println("Reusing existing sync pod")
-		return nil
+		currentArch, _ := exec.Command(kubecli, "get", "pod", podName, "-n", namespace,
+			"-o", `jsonpath={.spec.nodeSelector.kubernetes\.io/arch}`).CombinedOutput()
+		if string(currentArch) == nodeArch {
+			fmt.Println("Reusing existing sync pod")
+			return nil
+		}
+		fmt.Printf("Replacing sync pod (arch mismatch: %q → %q)... ", string(currentArch), nodeArch)
+		delCmd := exec.Command(kubecli, "delete", "pod", podName, "-n", namespace,
+			"--grace-period=0", "--force")
+		delCmd.Stderr = os.Stderr
+		_ = delCmd.Run()
+		fmt.Println("done")
 	case "":
 		// Pod doesn't exist, create it
 	default:
-		// Pod exists but not running (Pending, Terminating, Failed, etc.) -- delete and recreate
 		fmt.Print("Removing stale sync pod... ")
 		delCmd := exec.Command(kubecli, "delete", "pod", podName, "-n", namespace,
 			"--ignore-not-found", "--grace-period=0", "--force")
