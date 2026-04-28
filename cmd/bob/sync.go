@@ -105,13 +105,23 @@ func ensurePVC(kubecli, namespace, pvcName string) error {
 func switchToPVCAndTrigger(kubecli, namespace, bjName, pvcName, pvcPath string) error {
 	fmt.Printf("\nSwitching BuildJob %s to local source...\n", bjName)
 
-	// Save the original source spec as an annotation so we can restore later
+	// Save the original source spec as JSON so we can restore later
 	out, err := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
-		"-o", "jsonpath={.spec.source}").CombinedOutput()
+		"-o", "json").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("reading BuildJob source: %w", err)
+		return fmt.Errorf("reading BuildJob: %w", err)
 	}
-	originalSource := string(out)
+	var bjObj map[string]interface{}
+	if err := json.Unmarshal(out, &bjObj); err != nil {
+		return fmt.Errorf("parsing BuildJob JSON: %w", err)
+	}
+	spec, _ := bjObj["spec"].(map[string]interface{})
+	sourceSpec, _ := spec["source"].(map[string]interface{})
+	sourceJSON, err := json.Marshal(sourceSpec)
+	if err != nil {
+		return fmt.Errorf("serializing source spec: %w", err)
+	}
+	originalSource := string(sourceJSON)
 
 	// Check if already has an original-source annotation (don't overwrite)
 	existing, _ := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,

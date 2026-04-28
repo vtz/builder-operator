@@ -37,7 +37,6 @@ func newBuildCmd() *cobra.Command {
 	var sourceDir string
 	var outputDir string
 	var pvcName string
-	var namespace string
 
 	cmd := &cobra.Command{
 		Use:   "build [name]",
@@ -53,6 +52,7 @@ func newBuildCmd() *cobra.Command {
 When --local is used, the BuildJob is temporarily switched to use your local
 source. The next build without --local automatically restores git source.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ns := firstNonEmpty(bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
 			if local {
 				if len(args) == 0 && file == "" {
 					return fmt.Errorf("--local requires a BuildJob name or -f <file>")
@@ -60,7 +60,6 @@ source. The next build without --local automatically restores git source.`,
 				if file != "" {
 					return runLocalBuild(file, branch, sourceDir, outputDir)
 				}
-				ns := firstNonEmpty(namespace, bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
 				kubecli := detectKubeClient()
 				if kubecli == "" {
 					return fmt.Errorf("no Kubernetes CLI found (install oc or kubectl)")
@@ -76,8 +75,9 @@ source. The next build without --local automatically restores git source.`,
 			if len(args) == 0 {
 				return fmt.Errorf("provide a BuildJob name or use -f <file>")
 			}
-			ns := firstNonEmpty(namespace, bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
-			autoRestoreIfLocal(ns, args[0])
+			if err := autoRestoreIfLocal(ns, args[0]); err != nil {
+				return fmt.Errorf("restoring git source: %w", err)
+			}
 			return retrigger(cmd.Context(), args[0])
 		},
 	}
@@ -87,7 +87,6 @@ source. The next build without --local automatically restores git source.`,
 	cmd.Flags().StringVar(&sourceDir, "source", ".", "Local source directory (used with --local)")
 	cmd.Flags().StringVar(&outputDir, "output", "./bob-output", "Local output directory for artifacts (used with --local -f)")
 	cmd.Flags().StringVar(&pvcName, "pvc", "source-code", "PVC name for local source upload")
-	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Target namespace")
 	return cmd
 }
 
@@ -155,17 +154,17 @@ func createFromFile(ctx context.Context, path string, branch string) error {
 	return nil
 }
 
-func autoRestoreIfLocal(namespace, bjName string) {
+func autoRestoreIfLocal(namespace, bjName string) error {
 	kubecli := detectKubeClient()
 	if kubecli == "" {
-		return
+		return nil
 	}
 	out, _ := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
 		"-o", `jsonpath={.metadata.annotations.builder\.sdv\.cloud\.redhat\.com/original-source}`).CombinedOutput()
 	if len(out) > 0 && string(out) != "" {
-		fmt.Print("Restoring git source... ")
-		_ = restoreGitSource(kubecli, namespace, bjName)
+		return restoreGitSource(kubecli, namespace, bjName)
 	}
+	return nil
 }
 
 func retrigger(ctx context.Context, name string) error {
