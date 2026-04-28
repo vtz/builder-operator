@@ -232,10 +232,10 @@ func tarDirectory(dir string, w io.Writer) (int, error) {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-
-		if _, err := io.Copy(tw, f); err != nil {
-			return err
+		_, copyErr := io.Copy(tw, f)
+		f.Close()
+		if copyErr != nil {
+			return copyErr
 		}
 		count++
 		return nil

@@ -80,14 +80,17 @@ git rev-parse HEAD > $(results.commit-sha.path)
 
 	case bj.Spec.Source.Type == buildv1alpha1.SourceTypePVC && bj.Spec.Source.PVC != nil:
 		srcPath := bj.Spec.Source.PVC.Path
-		if srcPath == "" || srcPath == "/" {
+		if srcPath == "" {
 			srcPath = "/"
+		}
+		if !strings.HasPrefix(srcPath, "/") {
+			srcPath = "/" + srcPath
 		}
 		if !strings.HasSuffix(srcPath, "/") {
 			srcPath += "/"
 		}
-		copyScript := fmt.Sprintf(`#!/usr/bin/env bash
-set -euo pipefail
+		copyScript := fmt.Sprintf(`#!/bin/sh
+set -eu
 mkdir -p $(workspaces.ws.path)/source
 cp -a /mnt/pvc-source%s. $(workspaces.ws.path)/source/
 echo "Copied PVC source to workspace"
