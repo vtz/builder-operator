@@ -17,7 +17,7 @@ spec:
     architecture: arm
   stages:
     - name: fetch
-      command: 'if [ "$BOB_SOURCE_TYPE" = "pvc" ]; then echo "Skipping fetch (local source)"; else west init -l source && west update --narrow -o=--depth=1; fi'
+      command: "west init -l source && west update --narrow -o=--depth=1"
     - name: build
       command: "west build -b ${BOB_BOARD} source/app"
     - name: package
