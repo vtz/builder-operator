@@ -387,9 +387,14 @@ func buildCollectTask(image, script string, envVars []interface{}, runAfter stri
 }
 
 func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {
+	sourceType := string(bj.Spec.Source.Type)
+	if sourceType == "" {
+		sourceType = "git"
+	}
 	vars := []interface{}{
 		map[string]interface{}{"name": "BOB_NAME", "value": bj.Name},
 		map[string]interface{}{"name": "BOB_NAMESPACE", "value": bj.Namespace},
+		map[string]interface{}{"name": "BOB_SOURCE_TYPE", "value": sourceType},
 	}
 	if bj.Spec.Target.Board != "" {
 		vars = append(vars, map[string]interface{}{"name": "BOB_BOARD", "value": bj.Spec.Target.Board})

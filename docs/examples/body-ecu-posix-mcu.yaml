@@ -16,7 +16,7 @@ spec:
     architecture: native
   stages:
     - name: fetch
-      command: "west init -l source && west update"
+      command: "west init -l source && west update --narrow -o=--depth=1"
     - name: build
       command: "cmake -S source/platforms/posix-mcu -B build && cmake --build build -j$(nproc)"
     - name: package

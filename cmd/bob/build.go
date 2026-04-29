@@ -64,9 +64,11 @@ source. The next build without --local automatically restores git source.`,
 				if kubecli == "" {
 					return fmt.Errorf("no Kubernetes CLI found (install oc or kubectl)")
 				}
-				if err := runSync(sourceDir, pvcName, ns, "/", kubecli); err != nil {
+				arch := buildJobArch(kubecli, ns, args[0])
+				if err := runSyncWithArch(sourceDir, pvcName, ns, "/", kubecli, arch); err != nil {
 					return err
 				}
+				cleanupSyncPod(kubecli, ns, pvcName)
 				return switchToPVCAndTrigger(kubecli, ns, args[0], pvcName, "/")
 			}
 			if file != "" {

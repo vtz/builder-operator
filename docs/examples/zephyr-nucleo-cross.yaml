@@ -17,7 +17,7 @@ spec:
     architecture: arm
   stages:
     - name: fetch
-      command: "west init -l source && west update"
+      command: "west init -l source && west update --narrow -o=--depth=1"
     - name: build
       command: "west build -b ${BOB_BOARD} source/app"
     - name: package
