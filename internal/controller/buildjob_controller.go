@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -43,9 +44,10 @@ type BuildJobReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
 	PipelineConfig tekton.PipelineConfig
+	Recorder       record.EventRecorder
 }
 
-const runAtAnnotation = "builder.sdv.cloud.redhat.com/run-at"
+const runAtAnnotation = buildv1alpha1.AnnotationRunAt
 
 func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -54,6 +56,8 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.Get(ctx, req.NamespacedName, &bj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	bj.Status.ObservedGeneration = bj.Generation
 
 	needsNewRun := bj.Status.CurrentPipelineRun == ""
 	if !needsNewRun {
@@ -64,9 +68,6 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if needsNewRun {
-		// Guard against runaway loop: if a previous reconcile created a
-		// PipelineRun but the status update failed, we'd re-enter here
-		// and create another. Check for an existing active PipelineRun first.
 		if active := r.findActivePipelineRun(ctx, &bj); active != nil {
 			logger.Info("adopting existing PipelineRun", "name", active.GetName())
 			bj.Status.CurrentPipelineRun = active.GetName()
@@ -101,7 +102,23 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		nodeSelector := map[string]interface{}{}
 
-		if k8sArch := archToK8s(bj.Spec.Target.Architecture); k8sArch != "" {
+		k8sArch, archErr := archToK8s(bj.Spec.Target.Architecture)
+		if archErr != nil {
+			bj.Status.Phase = buildv1alpha1.PhaseFailed
+			bj.Status.FailureReason = "UnsupportedArchitecture"
+			bj.Status.Conditions = mergeCondition(
+				bj.Status.Conditions,
+				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "UnsupportedArchitecture", archErr.Error(), bj.Generation),
+			)
+			if statusErr := r.Status().Update(ctx, &bj); statusErr != nil {
+				return ctrl.Result{}, fmt.Errorf("updating status for unsupported architecture: %w", statusErr)
+			}
+			if r.Recorder != nil {
+				r.Recorder.Eventf(&bj, corev1.EventTypeWarning, "UnsupportedArchitecture", "%v", archErr)
+			}
+			return ctrl.Result{}, nil
+		}
+		if k8sArch != "" {
 			nodeSelector["kubernetes.io/arch"] = k8sArch
 		}
 
@@ -151,6 +168,12 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
 		logger.Info("created PipelineRun", "name", pipelineRun.GetName(), "run", runN)
+		if r.Recorder != nil {
+			r.Recorder.Eventf(&bj, corev1.EventTypeNormal, "PipelineRunCreated",
+				"Created PipelineRun %s (run #%d)", pipelineRun.GetName(), runN)
+		}
+		BuildsTotal.WithLabelValues(bj.Namespace, "started").Inc()
+		ActiveBuilds.WithLabelValues(bj.Namespace).Inc()
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -172,9 +195,23 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("fetching PipelineRun %q: %w", bj.Status.CurrentPipelineRun, err)
 	}
 
+	prevPhase := bj.Status.Phase
 	r.syncStatusFromPipelineRun(&bj, &pr)
 	if err := r.Status().Update(ctx, &bj); err != nil {
 		return ctrl.Result{}, fmt.Errorf("updating status from PipelineRun: %w", err)
+	}
+
+	if r.Recorder != nil && prevPhase != bj.Status.Phase {
+		switch bj.Status.Phase {
+		case buildv1alpha1.PhaseSucceeded:
+			r.Recorder.Event(&bj, corev1.EventTypeNormal, "BuildSucceeded", "Build completed successfully")
+			BuildsTotal.WithLabelValues(bj.Namespace, "succeeded").Inc()
+			ActiveBuilds.WithLabelValues(bj.Namespace).Dec()
+		case buildv1alpha1.PhaseFailed:
+			r.Recorder.Eventf(&bj, corev1.EventTypeWarning, "BuildFailed", "Build failed: %s", bj.Status.FailureReason)
+			BuildsTotal.WithLabelValues(bj.Namespace, "failed").Inc()
+			ActiveBuilds.WithLabelValues(bj.Namespace).Dec()
+		}
 	}
 
 	if bj.Status.Phase == buildv1alpha1.PhaseRunning || bj.Status.Phase == buildv1alpha1.PhasePending {
@@ -219,7 +256,6 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 		}
 	}
 
-	// Distinguish Pending from Running by checking if startTime exists
 	if phase == buildv1alpha1.PhaseRunning {
 		_, found, _ := unstructured.NestedString(pr.Object, "status", "startTime")
 		if !found {
@@ -248,12 +284,12 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 	bj.Status.Stages = stageStatuses
 
 	if bj.Spec.Artifacts.Path != "" {
-		bj.Status.ArtifactURI = bj.Spec.Artifacts.Path
+		bj.Status.ArtifactURI = fmt.Sprintf("/v1/namespaces/%s/buildjobs/%s/artifacts", bj.Namespace, bj.Name)
 	}
 
 	results, _, _ := unstructured.NestedSlice(pr.Object, "status", "results")
-	for _, r := range results {
-		m, ok := r.(map[string]interface{})
+	for _, result := range results {
+		m, ok := result.(map[string]interface{})
 		if !ok {
 			continue
 		}
@@ -279,7 +315,7 @@ func (r *BuildJobReconciler) findActivePipelineRun(ctx context.Context, bj *buil
 	var prList unstructured.UnstructuredList
 	prList.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRunList"})
 	if err := r.List(ctx, &prList, client.InNamespace(bj.Namespace), client.MatchingLabels{
-		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
+		buildv1alpha1.LabelBuildJob: bj.Name,
 	}); err != nil || len(prList.Items) == 0 {
 		return nil
 	}
@@ -311,7 +347,7 @@ func (r *BuildJobReconciler) nextRunNumber(ctx context.Context, bj *buildv1alpha
 	var prList unstructured.UnstructuredList
 	prList.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRunList"})
 	if err := r.List(ctx, &prList, client.InNamespace(bj.Namespace), client.MatchingLabels{
-		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
+		buildv1alpha1.LabelBuildJob: bj.Name,
 	}); err != nil {
 		return bj.Status.RunCount + 1
 	}
@@ -322,56 +358,25 @@ func (r *BuildJobReconciler) nextRunNumber(ctx context.Context, bj *buildv1alpha
 	return n
 }
 
-// archToK8s maps BuildJob architecture values to Kubernetes node label values.
-func archToK8s(arch string) string {
+func archToK8s(arch string) (string, error) {
 	switch arch {
 	case "arm":
-		return "arm64"
+		return "arm64", nil
 	case "x86":
-		return "amd64"
-	case "native":
-		return ""
+		return "amd64", nil
+	case "riscv":
+		return "riscv64", nil
+	case "xtensa":
+		return "", fmt.Errorf("xtensa is an embedded MCU architecture with no Kubernetes node equivalent; use native mode for cross-compilation")
+	case "native", "":
+		return "", nil
 	default:
-		return ""
+		return "", fmt.Errorf("unsupported architecture: %q", arch)
 	}
 }
 
-// cacheNodeSelector returns a nodeSelector map that pins pods to the same
-// topology zone as the cache PV. This prevents scheduling failures when the
-// cache PVC (RWO) is bound to a node in a different zone than the workspace.
 func (r *BuildJobReconciler) cacheNodeSelector(ctx context.Context, bj *buildv1alpha1.BuildJob) map[string]interface{} {
-	logger := log.FromContext(ctx)
-	pvcName := tekton.SharedCachePVCName()
-
-	var pvc corev1.PersistentVolumeClaim
-	if err := r.Get(ctx, client.ObjectKey{Namespace: bj.Namespace, Name: pvcName}, &pvc); err != nil {
-		return nil
-	}
-	if pvc.Spec.VolumeName == "" {
-		return nil
-	}
-
-	var pv corev1.PersistentVolume
-	if err := r.Get(ctx, client.ObjectKey{Name: pvc.Spec.VolumeName}, &pv); err != nil {
-		return nil
-	}
-	if pv.Spec.NodeAffinity == nil || pv.Spec.NodeAffinity.Required == nil {
-		return nil
-	}
-
-	selector := map[string]interface{}{}
-	for _, term := range pv.Spec.NodeAffinity.Required.NodeSelectorTerms {
-		for _, expr := range term.MatchExpressions {
-			if expr.Operator == corev1.NodeSelectorOpIn && len(expr.Values) == 1 {
-				selector[expr.Key] = expr.Values[0]
-			}
-		}
-	}
-	if len(selector) > 0 {
-		logger.Info("pinning pipeline to cache PV zone", "nodeSelector", selector)
-		return selector
-	}
-	return nil
+	return r.pvNodeSelector(ctx, bj.Namespace, tekton.SharedCachePVCName())
 }
 
 func (r *BuildJobReconciler) validateSourcePVC(ctx context.Context, bj *buildv1alpha1.BuildJob) error {
@@ -389,6 +394,13 @@ func (r *BuildJobReconciler) validateSourcePVC(ctx context.Context, bj *buildv1a
 }
 
 func (r *BuildJobReconciler) pvcNodeSelector(ctx context.Context, namespace, pvcName string) map[string]interface{} {
+	return r.pvNodeSelector(ctx, namespace, pvcName)
+}
+
+// pvNodeSelector extracts node affinity constraints from the PV backing a PVC.
+// This pins build pods to the same topology zone as the PV, preventing
+// scheduling failures when the PVC uses ReadWriteOnce access mode.
+func (r *BuildJobReconciler) pvNodeSelector(ctx context.Context, namespace, pvcName string) map[string]interface{} {
 	logger := log.FromContext(ctx)
 
 	var pvc corev1.PersistentVolumeClaim
@@ -416,7 +428,7 @@ func (r *BuildJobReconciler) pvcNodeSelector(ctx context.Context, namespace, pvc
 		}
 	}
 	if len(selector) > 0 {
-		logger.Info("pinning pipeline to source PVC zone", "pvc", pvcName, "nodeSelector", selector)
+		logger.Info("pinning pipeline to PV zone", "pvc", pvcName, "nodeSelector", selector)
 		return selector
 	}
 	return nil
@@ -437,7 +449,7 @@ func (r *BuildJobReconciler) ensureCachePVCs(ctx context.Context, bj *buildv1alp
 			Name:      pvcName,
 			Namespace: bj.Namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "bob",
+				buildv1alpha1.LabelManagedBy: buildv1alpha1.ManagedByValue,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{

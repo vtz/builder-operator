@@ -57,7 +57,7 @@ type Server struct {
 	UploadTimeoutSec int
 }
 
-func NewServer(c client.Client, addr, cliDir, artifactsDir string, restConfig *rest.Config) *Server {
+func NewServer(c client.Client, addr, cliDir, artifactsDir string, restConfig *rest.Config) (*Server, error) {
 	s := &Server{
 		Client:           c,
 		Addr:             addr,
@@ -69,9 +69,13 @@ func NewServer(c client.Client, addr, cliDir, artifactsDir string, restConfig *r
 		UploadTimeoutSec: DefaultUploadTimeoutSec,
 	}
 	if restConfig != nil {
-		s.KubeClient, _ = kubernetes.NewForConfig(restConfig)
+		kc, err := kubernetes.NewForConfig(restConfig)
+		if err != nil {
+			return nil, fmt.Errorf("creating kubernetes client: %w", err)
+		}
+		s.KubeClient = kc
 	}
-	return s
+	return s, nil
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -98,6 +102,8 @@ func (s *Server) Start(ctx context.Context) error {
 		Addr:              s.Addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      10 * time.Minute,
 	}
 
 	go func() {
@@ -149,6 +155,7 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	ns := r.PathValue("namespace")
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "reading request body")
@@ -174,7 +181,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		if existing.Annotations == nil {
 			existing.Annotations = map[string]string{}
 		}
-		existing.Annotations["builder.sdv.cloud.redhat.com/run-at"] = time.Now().UTC().Format(time.RFC3339)
+		existing.Annotations[buildv1alpha1.AnnotationRunAt] = time.Now().UTC().Format(time.RFC3339)
 		if err := s.Client.Update(r.Context(), &existing); err != nil {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("updating BuildJob: %v", err))
 			return
@@ -220,7 +227,7 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	if bj.Annotations == nil {
 		bj.Annotations = map[string]string{}
 	}
-	bj.Annotations["builder.sdv.cloud.redhat.com/run-at"] = time.Now().UTC().Format(time.RFC3339)
+	bj.Annotations[buildv1alpha1.AnnotationRunAt] = time.Now().UTC().Format(time.RFC3339)
 	if err := s.Client.Update(r.Context(), &bj); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("triggering run: %v", err))
 		return
@@ -287,6 +294,11 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logCtx, logCancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer logCancel()
+
+	var limitBytes int64 = 10 << 20 // 10 MiB per container
+
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)
@@ -299,13 +311,14 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 			}
 
 			stream, err := s.KubeClient.CoreV1().Pods(ns).GetLogs(pod.Name, &corev1.PodLogOptions{
-				Container: container.Name,
-			}).Stream(r.Context())
+				Container:  container.Name,
+				LimitBytes: &limitBytes,
+			}).Stream(logCtx)
 			if err != nil {
 				fmt.Fprintf(w, "[error reading logs: %v]\n\n", err)
 				continue
 			}
-			io.Copy(w, stream)
+			io.CopyN(w, stream, limitBytes)
 			stream.Close()
 			w.Write([]byte("\n"))
 			if flusher != nil {
@@ -550,7 +563,9 @@ func toSummary(bj *buildv1alpha1.BuildJob) BuildJobSummary {
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Log.Error(err, "failed to encode JSON response")
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {

@@ -26,6 +26,9 @@ const (
 	TektonAPIVersion = "tekton.dev/v1"
 	PipelineRunKind  = "PipelineRun"
 	GitCloneImage    = "alpine/git:latest"
+
+	workspaceName     = "shared-workspace"
+	taskWorkspaceName = "ws"
 )
 
 type PipelineConfig struct {
@@ -45,7 +48,7 @@ func BuildPipelineRunN(bj *buildv1alpha1.BuildJob, runN int64) *unstructured.Uns
 
 func BuildPipelineRunWithConfig(bj *buildv1alpha1.BuildJob, runN int64, cfg PipelineConfig) *unstructured.Unstructured {
 	labels := map[string]interface{}{
-		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
+		buildv1alpha1.LabelBuildJob: bj.Name,
 	}
 
 	prName := fmt.Sprintf("%s-run%d", bj.Name, runN)
@@ -73,7 +76,7 @@ git clone %s source
 cd source
 git checkout %s
 git rev-parse HEAD > $(results.commit-sha.path)
-`, shellQuote(bj.Spec.Source.Git.URL), shellQuote(rev))
+`, ShellQuote(bj.Spec.Source.Git.URL), ShellQuote(rev))
 		cloneTask := buildCloneTaskSpec("clone", GitCloneImage, cloneScript, envVars)
 		tasks = append(tasks, cloneTask)
 		prevStage = "clone"
@@ -146,7 +149,9 @@ if r.status >= 400:
 		if apiPort == "" {
 			apiPort = "8082"
 		}
-		collectEnv := append(envVars,
+		collectEnv := make([]interface{}, len(envVars), len(envVars)+3)
+		copy(collectEnv, envVars)
+		collectEnv = append(collectEnv,
 			map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
 			map[string]interface{}{"name": "BOB_API_HOST", "value": apiHost},
 			map[string]interface{}{"name": "BOB_API_PORT", "value": apiPort},
@@ -156,11 +161,11 @@ if r.status >= 400:
 	}
 
 	pipelineWorkspaces := []interface{}{
-		map[string]interface{}{"name": "shared-workspace"},
+		map[string]interface{}{"name": workspaceName},
 	}
 	runWorkspaces := []interface{}{
 		map[string]interface{}{
-			"name": "shared-workspace",
+			"name": workspaceName,
 			"volumeClaimTemplate": map[string]interface{}{
 				"spec": map[string]interface{}{
 					"accessModes": []interface{}{"ReadWriteOnce"},
@@ -226,7 +231,7 @@ func buildCloneTaskSpec(name, image, script string, envVars []interface{}) map[s
 	allowPrivEsc := false
 	taskSpec := map[string]interface{}{
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
 		},
 		"results": []interface{}{
 			map[string]interface{}{"name": "commit-sha", "description": "The resolved git commit SHA"},
@@ -247,7 +252,7 @@ func buildCloneTaskSpec(name, image, script string, envVars []interface{}) map[s
 		"name":     name,
 		"taskSpec": taskSpec,
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
 		},
 	}
 }
@@ -256,7 +261,7 @@ func buildPVCCopyTaskSpec(name, image, script string, envVars []interface{}, cla
 	allowPrivEsc := false
 	taskSpec := map[string]interface{}{
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
 		},
 		"volumes": []interface{}{
 			map[string]interface{}{
@@ -290,7 +295,7 @@ func buildPVCCopyTaskSpec(name, image, script string, envVars []interface{}, cla
 		"name":     name,
 		"taskSpec": taskSpec,
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
 		},
 	}
 }
@@ -329,7 +334,7 @@ func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter 
 	taskSpec := map[string]interface{}{
 		"workspaces": []interface{}{
 			map[string]interface{}{
-				"name":      "ws",
+				"name":      taskWorkspaceName,
 				"mountPath": "/workspace",
 			},
 		},
@@ -344,8 +349,8 @@ func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter 
 		"taskSpec": taskSpec,
 		"workspaces": []interface{}{
 			map[string]interface{}{
-				"name":      "ws",
-				"workspace": "shared-workspace",
+				"name":      taskWorkspaceName,
+				"workspace": workspaceName,
 			},
 		},
 	}
@@ -365,7 +370,7 @@ func buildCollectTask(image, script string, envVars []interface{}, runAfter stri
 		"name": "collect-artifacts",
 		"taskSpec": map[string]interface{}{
 			"workspaces": []interface{}{
-				map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+				map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
 			},
 			"steps": []interface{}{
 				map[string]interface{}{
@@ -381,15 +386,20 @@ func buildCollectTask(image, script string, envVars []interface{}, runAfter stri
 		},
 		"runAfter": []interface{}{runAfter},
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
 		},
 	}
 }
 
 func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {
+	sourceType := string(bj.Spec.Source.Type)
+	if sourceType == "" {
+		sourceType = "git"
+	}
 	vars := []interface{}{
 		map[string]interface{}{"name": "BOB_NAME", "value": bj.Name},
 		map[string]interface{}{"name": "BOB_NAMESPACE", "value": bj.Namespace},
+		map[string]interface{}{"name": "BOB_SOURCE_TYPE", "value": sourceType},
 	}
 	if bj.Spec.Target.Board != "" {
 		vars = append(vars, map[string]interface{}{"name": "BOB_BOARD", "value": bj.Spec.Target.Board})
@@ -406,6 +416,6 @@ func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {
 	return vars
 }
 
-func shellQuote(s string) string {
+func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }

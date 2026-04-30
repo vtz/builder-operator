@@ -91,9 +91,9 @@ func runLocalBuild(file, branch, sourceDir, outputDir string) error {
 
 	for i, stage := range bj.Spec.Stages {
 		scriptParts = append(scriptParts,
-			fmt.Sprintf("echo '▸ [%d/%d] %s'", i+1, len(bj.Spec.Stages), stage.Name),
+			fmt.Sprintf("echo '> [%d/%d] %s'", i+1, len(bj.Spec.Stages), stage.Name),
 			stage.Command,
-			fmt.Sprintf("echo '  ✓ %s completed'", stage.Name),
+			fmt.Sprintf("echo '  [OK] %s completed'", stage.Name),
 		)
 	}
 

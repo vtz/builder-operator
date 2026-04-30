@@ -82,7 +82,11 @@ type ToolchainCRStatus struct {
 	// +optional
 	LastBuildTime string `json:"lastBuildTime,omitempty"`
 	// +optional
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

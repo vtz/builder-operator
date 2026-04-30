@@ -27,7 +27,6 @@ const (
 	SourceTypePVC SourceType = "pvc"
 
 	ArtifactDestinationPVC ArtifactDestinationType = "pvc"
-	ArtifactDestinationOCI ArtifactDestinationType = "oci"
 
 	PhasePending   BuildJobPhase = "Pending"
 	PhaseRunning   BuildJobPhase = "Running"
@@ -96,7 +95,7 @@ type StageSpec struct {
 }
 
 type ArtifactSpec struct {
-	// +kubebuilder:validation:Enum=pvc;oci
+	// +kubebuilder:validation:Enum=pvc
 	// +kubebuilder:default=pvc
 	Destination ArtifactDestinationType `json:"destination,omitempty"`
 	// +optional
@@ -155,11 +154,15 @@ type BuildJobStatus struct {
 	// +optional
 	Stages []StageStatus `json:"stages,omitempty"`
 	// +optional
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	RunCount int64 `json:"runCount,omitempty"`
 	// +optional
 	LastRunAt string `json:"lastRunAt,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
