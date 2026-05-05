@@ -121,6 +121,25 @@ spec:
                       default: pvc
                     path:
                       type: string
+                    oci:
+                      type: object
+                      properties:
+                        repository:
+                          type: string
+                          minLength: 1
+                        tag:
+                          type: string
+                        pushSecret:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                              minLength: 1
+                            key:
+                              type: string
+                        mediaType:
+                          type: string
+                      required: [repository]
                 caches:
                   type: array
                   items:
@@ -141,6 +160,8 @@ spec:
                   type: string
                 artifactURI:
                   type: string
+                ociArtifactRef:
+                  type: string
                 failureReason:
                   type: string
                 commitSHA:
@@ -150,6 +171,9 @@ spec:
                   format: int64
                 lastRunAt:
                   type: string
+                observedGeneration:
+                  type: integer
+                  format: int64
                 stages:
                   type: array
                   items:

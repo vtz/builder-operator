@@ -442,6 +442,8 @@ func buildOCIArtifactTask(bj *buildv1alpha1.BuildJob, envVars []interface{}, run
 
 	script := fmt.Sprintf(`#!/usr/bin/env sh
 set -eu
+export HOME=/tmp/oras-home
+mkdir -p "$HOME"
 cd $(workspaces.ws.path)
 ARTIFACTS_DIR=%q
 if [ ! -d "$ARTIFACTS_DIR" ] || [ -z "$(ls -A "$ARTIFACTS_DIR" 2>/dev/null)" ]; then
@@ -450,8 +452,9 @@ if [ ! -d "$ARTIFACTS_DIR" ] || [ -z "$(ls -A "$ARTIFACTS_DIR" 2>/dev/null)" ]; 
 fi
 
 if [ -n "${REGISTRY_AUTH_FILE:-}" ]; then
-  mkdir -p ~/.docker
-  cp "$REGISTRY_AUTH_FILE" ~/.docker/config.json
+  export DOCKER_CONFIG="$HOME/.docker"
+  mkdir -p "$DOCKER_CONFIG"
+  cp "$REGISTRY_AUTH_FILE" "$DOCKER_CONFIG/config.json"
 fi
 
 cd "$ARTIFACTS_DIR"
@@ -461,7 +464,7 @@ for f in *; do
 done
 
 echo "Pushing OCI artifact to %s"
-oras push %s \
+oras push --insecure %s \
   --artifact-type %s \
   %s \
   $FILES
@@ -495,6 +498,7 @@ echo "OCI_ARTIFACT_REF=%s" > $(results.oci-ref.path)
 	}
 
 	allowPrivEsc := false
+	var runAsUser int64 = 1000
 	step := map[string]interface{}{
 		"name":  "oras-push",
 		"image": OrasImage,
@@ -502,6 +506,7 @@ echo "OCI_ARTIFACT_REF=%s" > $(results.oci-ref.path)
 		"securityContext": map[string]interface{}{
 			"allowPrivilegeEscalation": allowPrivEsc,
 			"runAsNonRoot":             true,
+			"runAsUser":                runAsUser,
 		},
 		"script": script,
 	}
