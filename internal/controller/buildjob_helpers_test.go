@@ -305,6 +305,57 @@ func TestMergeCondition_PreservesOtherTypes(t *testing.T) {
 	}
 }
 
+func TestComputeOCIRef_DefaultTag(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "body-ecu", Generation: 5},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Artifacts: buildv1alpha1.ArtifactSpec{
+				OCI: &buildv1alpha1.OCIArtifactConfig{
+					Repository: "quay.io/myorg/firmware",
+				},
+			},
+		},
+	}
+	ref := computeOCIRef(bj)
+	expected := "quay.io/myorg/firmware:body-ecu-5"
+	if ref != expected {
+		t.Fatalf("expected %q, got %q", expected, ref)
+	}
+}
+
+func TestComputeOCIRef_CustomTag(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "body-ecu", Generation: 3},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Target: buildv1alpha1.TargetSpec{Architecture: "arm", Variant: "v7m"},
+			Artifacts: buildv1alpha1.ArtifactSpec{
+				OCI: &buildv1alpha1.OCIArtifactConfig{
+					Repository: "quay.io/myorg/firmware",
+					Tag:        "${name}-${arch}-${variant}",
+				},
+			},
+		},
+	}
+	ref := computeOCIRef(bj)
+	expected := "quay.io/myorg/firmware:body-ecu-arm-v7m"
+	if ref != expected {
+		t.Fatalf("expected %q, got %q", expected, ref)
+	}
+}
+
+func TestComputeOCIRef_NilOCI(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "body-ecu"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Artifacts: buildv1alpha1.ArtifactSpec{},
+		},
+	}
+	ref := computeOCIRef(bj)
+	if ref != "" {
+		t.Fatalf("expected empty ref for nil OCI, got %q", ref)
+	}
+}
+
 func newFakeReconcilerWithObjs(objs ...client.Object) *BuildJobReconciler {
 	return newFakeReconciler(objs...)
 }

@@ -669,6 +669,200 @@ func TestSharedCachePVCName(t *testing.T) {
 	}
 }
 
+func TestBuildPipelineRun_OCIArtifactTask(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+			PushSecret: &buildv1alpha1.SecretReference{Name: "quay-push-creds"},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	if last["name"] != "oci-push" {
+		t.Fatalf("expected last task to be oci-push, got %s", last["name"])
+	}
+
+	taskSpec := last["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+
+	if step["image"] != OrasImage {
+		t.Fatalf("expected oras image %s, got %v", OrasImage, step["image"])
+	}
+
+	script := step["script"].(string)
+	if !strings.Contains(script, "oras push") {
+		t.Fatal("expected oras push command in script")
+	}
+	if !strings.Contains(script, "quay.io/myorg/firmware:body-ecu-3") {
+		t.Fatalf("expected default tag body-ecu-3, script:\n%s", script)
+	}
+	if !strings.Contains(script, "application/vnd.auto.firmware.layer.v1") {
+		t.Fatal("expected default firmware media type in script")
+	}
+
+	envs := step["env"].([]interface{})
+	envMap := make(map[string]string)
+	for _, e := range envs {
+		m := e.(map[string]interface{})
+		envMap[m["name"].(string)] = m["value"].(string)
+	}
+	if envMap["REGISTRY_AUTH_FILE"] != "/etc/oci-push-secret/.dockerconfigjson" {
+		t.Fatalf("expected REGISTRY_AUTH_FILE env, got %q", envMap["REGISTRY_AUTH_FILE"])
+	}
+
+	// Verify volume mount for secret
+	mounts := step["volumeMounts"].([]interface{})
+	if len(mounts) != 1 {
+		t.Fatalf("expected 1 volume mount for push secret, got %d", len(mounts))
+	}
+	mount := mounts[0].(map[string]interface{})
+	if mount["mountPath"] != "/etc/oci-push-secret" {
+		t.Fatalf("expected secret mount at /etc/oci-push-secret, got %v", mount["mountPath"])
+	}
+
+	// Verify volume for secret
+	volumes := taskSpec["volumes"].([]interface{})
+	if len(volumes) != 1 {
+		t.Fatalf("expected 1 volume for push secret, got %d", len(volumes))
+	}
+	vol := volumes[0].(map[string]interface{})
+	secret := vol["secret"].(map[string]interface{})
+	if secret["secretName"] != "quay-push-creds" {
+		t.Fatalf("expected secret name quay-push-creds, got %v", secret["secretName"])
+	}
+
+	// Verify task results
+	results := taskSpec["results"].([]interface{})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	result := results[0].(map[string]interface{})
+	if result["name"] != "oci-ref" {
+		t.Fatalf("expected result name oci-ref, got %v", result["name"])
+	}
+}
+
+func TestBuildPipelineRun_OCIArtifactTask_CustomTag(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+			Tag:        "${name}-${arch}-latest",
+			MediaType:  "application/vnd.custom.binary",
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	taskSpec := last["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	script := step["script"].(string)
+
+	if !strings.Contains(script, "quay.io/myorg/firmware:body-ecu-arm-latest") {
+		t.Fatalf("expected custom tag substitution, script:\n%s", script)
+	}
+	if !strings.Contains(script, "application/vnd.custom.binary") {
+		t.Fatal("expected custom media type in script")
+	}
+}
+
+func TestBuildPipelineRun_OCIArtifactTask_NoSecret(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	taskSpec := last["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+
+	if _, has := step["volumeMounts"]; has {
+		t.Fatal("expected no volumeMounts when no push secret")
+	}
+
+	if _, has := taskSpec["volumes"]; has {
+		t.Fatal("expected no volumes when no push secret")
+	}
+}
+
+func TestBuildPipelineRun_OCIArtifactTask_Annotations(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Target.Variant = "v7m"
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	taskSpec := last["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	script := step["script"].(string)
+
+	if !strings.Contains(script, "vnd.auto.target.board") {
+		t.Fatal("expected board annotation in oras push")
+	}
+	if !strings.Contains(script, "vnd.auto.target.variant") {
+		t.Fatal("expected variant annotation when variant is set")
+	}
+}
+
+func TestBuildPipelineRun_OCIArtifactTask_RunAfterLastStage(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	runAfter := last["runAfter"].([]interface{})
+	if runAfter[0] != "package" {
+		t.Fatalf("oci-push should runAfter last stage 'package', got %v", runAfter[0])
+	}
+}
+
+func TestBuildPipelineRun_PVCArtifactStillWorks(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationPVC,
+		Path:        "/workspace/artifacts",
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	last := tasks[len(tasks)-1].(map[string]interface{})
+	if last["name"] != "collect-artifacts" {
+		t.Fatalf("expected PVC destination to use collect-artifacts task, got %s", last["name"])
+	}
+}
+
 func getPipelineTasks(t *testing.T, pr *unstructured.Unstructured) []interface{} {
 	t.Helper()
 	spec := pr.Object["spec"].(map[string]interface{})

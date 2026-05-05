@@ -26,9 +26,12 @@ const (
 	TektonAPIVersion = "tekton.dev/v1"
 	PipelineRunKind  = "PipelineRun"
 	GitCloneImage    = "alpine/git:latest"
+	OrasImage        = "ghcr.io/oras-project/oras:v1.2.0"
 
 	workspaceName     = "shared-workspace"
 	taskWorkspaceName = "ws"
+
+	DefaultFirmwareMediaType = "application/vnd.auto.firmware.layer.v1"
 )
 
 type PipelineConfig struct {
@@ -114,7 +117,12 @@ echo "Copied PVC source to workspace"
 	}
 
 	if bj.Spec.Artifacts.Path != "" {
-		uploadScript := fmt.Sprintf(`#!/usr/bin/env bash
+		switch bj.Spec.Artifacts.Destination {
+		case buildv1alpha1.ArtifactDestinationOCI:
+			ociTask := buildOCIArtifactTask(bj, envVars, prevStage)
+			tasks = append(tasks, ociTask)
+		default:
+			uploadScript := fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 cd $(workspaces.ws.path)
 ARTIFACTS_DIR=%q
@@ -141,23 +149,24 @@ if r.status >= 400:
     sys.exit(1)
 "`, bj.Spec.Artifacts.Path)
 
-		apiHost := cfg.APIHost
-		if apiHost == "" {
-			apiHost = "bob-api.bob-system.svc"
+			apiHost := cfg.APIHost
+			if apiHost == "" {
+				apiHost = "bob-api.bob-system.svc"
+			}
+			apiPort := cfg.APIPort
+			if apiPort == "" {
+				apiPort = "8082"
+			}
+			collectEnv := make([]interface{}, len(envVars), len(envVars)+3)
+			copy(collectEnv, envVars)
+			collectEnv = append(collectEnv,
+				map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
+				map[string]interface{}{"name": "BOB_API_HOST", "value": apiHost},
+				map[string]interface{}{"name": "BOB_API_PORT", "value": apiPort},
+			)
+			collectTask := buildCollectTask(image, uploadScript, collectEnv, prevStage)
+			tasks = append(tasks, collectTask)
 		}
-		apiPort := cfg.APIPort
-		if apiPort == "" {
-			apiPort = "8082"
-		}
-		collectEnv := make([]interface{}, len(envVars), len(envVars)+3)
-		copy(collectEnv, envVars)
-		collectEnv = append(collectEnv,
-			map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
-			map[string]interface{}{"name": "BOB_API_HOST", "value": apiHost},
-			map[string]interface{}{"name": "BOB_API_PORT", "value": apiPort},
-		)
-		collectTask := buildCollectTask(image, uploadScript, collectEnv, prevStage)
-		tasks = append(tasks, collectTask)
 	}
 
 	pipelineWorkspaces := []interface{}{
@@ -384,6 +393,141 @@ func buildCollectTask(image, script string, envVars []interface{}, runAfter stri
 				},
 			},
 		},
+		"runAfter": []interface{}{runAfter},
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
+		},
+	}
+}
+
+func buildOCIArtifactTask(bj *buildv1alpha1.BuildJob, envVars []interface{}, runAfter string) map[string]interface{} {
+	oci := bj.Spec.Artifacts.OCI
+	if oci == nil {
+		return nil
+	}
+
+	mediaType := oci.MediaType
+	if mediaType == "" {
+		mediaType = DefaultFirmwareMediaType
+	}
+
+	tag := oci.Tag
+	if tag == "" {
+		tag = fmt.Sprintf("%s-%d", bj.Name, bj.Generation)
+	} else {
+		tag = strings.ReplaceAll(tag, "${name}", bj.Name)
+		tag = strings.ReplaceAll(tag, "${arch}", bj.Spec.Target.Architecture)
+		tag = strings.ReplaceAll(tag, "${variant}", bj.Spec.Target.Variant)
+	}
+
+	ref := fmt.Sprintf("%s:%s", oci.Repository, tag)
+
+	annotations := map[string]string{
+		"org.opencontainers.image.title":   bj.Name,
+		"vnd.auto.target.board":            bj.Spec.Target.Board,
+		"vnd.auto.target.platform":         bj.Spec.Target.Platform,
+		"vnd.auto.target.architecture":     bj.Spec.Target.Architecture,
+		"vnd.auto.build.generation":        fmt.Sprintf("%d", bj.Generation),
+	}
+	if bj.Spec.Target.Variant != "" {
+		annotations["vnd.auto.target.variant"] = bj.Spec.Target.Variant
+	}
+
+	var annotationFlags string
+	for k, v := range annotations {
+		if v != "" {
+			annotationFlags += fmt.Sprintf(" --annotation %s=%s", ShellQuote(k), ShellQuote(v))
+		}
+	}
+
+	script := fmt.Sprintf(`#!/usr/bin/env sh
+set -eu
+cd $(workspaces.ws.path)
+ARTIFACTS_DIR=%q
+if [ ! -d "$ARTIFACTS_DIR" ] || [ -z "$(ls -A "$ARTIFACTS_DIR" 2>/dev/null)" ]; then
+  echo "No artifacts to push"
+  exit 0
+fi
+
+if [ -n "${REGISTRY_AUTH_FILE:-}" ]; then
+  mkdir -p ~/.docker
+  cp "$REGISTRY_AUTH_FILE" ~/.docker/config.json
+fi
+
+cd "$ARTIFACTS_DIR"
+FILES=""
+for f in *; do
+  [ -f "$f" ] && FILES="$FILES $f:%s"
+done
+
+echo "Pushing OCI artifact to %s"
+oras push %s \
+  --artifact-type %s \
+  %s \
+  $FILES
+
+echo "OCI_ARTIFACT_REF=%s" > $(results.oci-ref.path)
+`, bj.Spec.Artifacts.Path, mediaType, ref, ShellQuote(ref), ShellQuote(mediaType), annotationFlags, ref)
+
+	ociEnv := make([]interface{}, len(envVars), len(envVars)+2)
+	copy(ociEnv, envVars)
+	ociEnv = append(ociEnv,
+		map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
+	)
+
+	volumes := []interface{}{}
+	volumeMounts := []interface{}{}
+	if oci.PushSecret != nil {
+		ociEnv = append(ociEnv,
+			map[string]interface{}{"name": "REGISTRY_AUTH_FILE", "value": "/etc/oci-push-secret/.dockerconfigjson"},
+		)
+		volumes = append(volumes, map[string]interface{}{
+			"name": "push-secret",
+			"secret": map[string]interface{}{
+				"secretName": oci.PushSecret.Name,
+			},
+		})
+		volumeMounts = append(volumeMounts, map[string]interface{}{
+			"name":      "push-secret",
+			"mountPath": "/etc/oci-push-secret",
+			"readOnly":  true,
+		})
+	}
+
+	allowPrivEsc := false
+	step := map[string]interface{}{
+		"name":  "oras-push",
+		"image": OrasImage,
+		"env":   ociEnv,
+		"securityContext": map[string]interface{}{
+			"allowPrivilegeEscalation": allowPrivEsc,
+			"runAsNonRoot":             true,
+		},
+		"script": script,
+	}
+	if len(volumeMounts) > 0 {
+		step["volumeMounts"] = volumeMounts
+	}
+
+	taskSpec := map[string]interface{}{
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
+		},
+		"results": []interface{}{
+			map[string]interface{}{
+				"name":        "oci-ref",
+				"description": "Full OCI reference of the pushed artifact",
+			},
+		},
+		"steps": []interface{}{step},
+	}
+	if len(volumes) > 0 {
+		taskSpec["volumes"] = volumes
+	}
+
+	return map[string]interface{}{
+		"name":     "oci-push",
+		"taskSpec": taskSpec,
 		"runAfter": []interface{}{runAfter},
 		"workspaces": []interface{}{
 			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},

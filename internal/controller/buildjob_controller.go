@@ -17,6 +17,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
@@ -284,7 +285,14 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 	bj.Status.Stages = stageStatuses
 
 	if bj.Spec.Artifacts.Path != "" {
-		bj.Status.ArtifactURI = fmt.Sprintf("/v1/namespaces/%s/buildjobs/%s/artifacts", bj.Namespace, bj.Name)
+		switch bj.Spec.Artifacts.Destination {
+		case buildv1alpha1.ArtifactDestinationOCI:
+			if phase == buildv1alpha1.PhaseSucceeded && bj.Spec.Artifacts.OCI != nil {
+				bj.Status.OCIArtifactRef = computeOCIRef(bj)
+			}
+		default:
+			bj.Status.ArtifactURI = fmt.Sprintf("/v1/namespaces/%s/buildjobs/%s/artifacts", bj.Namespace, bj.Name)
+		}
 	}
 
 	results, _, _ := unstructured.NestedSlice(pr.Object, "status", "results")
@@ -309,6 +317,22 @@ func mergeCondition(conditions []metav1.Condition, newCondition metav1.Condition
 		}
 	}
 	return append(conditions, newCondition)
+}
+
+func computeOCIRef(bj *buildv1alpha1.BuildJob) string {
+	oci := bj.Spec.Artifacts.OCI
+	if oci == nil {
+		return ""
+	}
+	tag := oci.Tag
+	if tag == "" {
+		tag = fmt.Sprintf("%s-%d", bj.Name, bj.Generation)
+	} else {
+		tag = strings.ReplaceAll(tag, "${name}", bj.Name)
+		tag = strings.ReplaceAll(tag, "${arch}", bj.Spec.Target.Architecture)
+		tag = strings.ReplaceAll(tag, "${variant}", bj.Spec.Target.Variant)
+	}
+	return fmt.Sprintf("%s:%s", oci.Repository, tag)
 }
 
 func (r *BuildJobReconciler) findActivePipelineRun(ctx context.Context, bj *buildv1alpha1.BuildJob) *unstructured.Unstructured {
