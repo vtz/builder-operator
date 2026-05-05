@@ -27,6 +27,21 @@ func newArtifactsCmd() *cobra.Command {
 			name := args[0]
 			ctx := context.Background()
 
+			build, err := c.Get(ctx, name)
+			if err != nil {
+				return fmt.Errorf("getting build: %w", err)
+			}
+
+			if build.OCIArtifactRef != "" {
+				fmt.Printf("Artifacts pushed as OCI artifact:\n\n")
+				fmt.Printf("  %s\n\n", build.OCIArtifactRef)
+				fmt.Printf("Pull with:\n")
+				fmt.Printf("  oras pull %s --output ./\n\n", build.OCIArtifactRef)
+				fmt.Printf("Inspect manifest:\n")
+				fmt.Printf("  oras manifest fetch %s | jq\n", build.OCIArtifactRef)
+				return nil
+			}
+
 			resp, err := c.ListArtifacts(ctx, name)
 			if err != nil {
 				return fmt.Errorf("listing artifacts: %w", err)
