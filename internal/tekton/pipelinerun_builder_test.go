@@ -739,12 +739,16 @@ func TestBuildPipelineRun_OCIArtifactTask(t *testing.T) {
 
 	// Verify task results
 	results := taskSpec["results"].([]interface{})
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results (oci-ref, oci-digest), got %d", len(results))
 	}
 	result := results[0].(map[string]interface{})
 	if result["name"] != "oci-ref" {
 		t.Fatalf("expected result name oci-ref, got %v", result["name"])
+	}
+	digestResult := results[1].(map[string]interface{})
+	if digestResult["name"] != "oci-digest" {
+		t.Fatalf("expected result name oci-digest, got %v", digestResult["name"])
 	}
 }
 

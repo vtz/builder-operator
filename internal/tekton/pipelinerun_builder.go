@@ -196,13 +196,27 @@ if r.status >= 400:
 		"tasks":      tasks,
 	}
 
+	var pipelineResults []interface{}
 	if bj.Spec.Source.Type == buildv1alpha1.SourceTypeGit && bj.Spec.Source.Git != nil {
-		pipelineSpec["results"] = []interface{}{
+		pipelineResults = append(pipelineResults, map[string]interface{}{
+			"name":  "commit-sha",
+			"value": "$(tasks.clone.results.commit-sha)",
+		})
+	}
+	if bj.Spec.Artifacts.Destination == buildv1alpha1.ArtifactDestinationOCI && bj.Spec.Artifacts.OCI != nil {
+		pipelineResults = append(pipelineResults,
 			map[string]interface{}{
-				"name":  "commit-sha",
-				"value": "$(tasks.clone.results.commit-sha)",
+				"name":  "oci-ref",
+				"value": "$(tasks.oci-push.results.oci-ref)",
 			},
-		}
+			map[string]interface{}{
+				"name":  "oci-digest",
+				"value": "$(tasks.oci-push.results.oci-digest)",
+			},
+		)
+	}
+	if len(pipelineResults) > 0 {
+		pipelineSpec["results"] = pipelineResults
 	}
 
 	spec := map[string]interface{}{
@@ -464,12 +478,15 @@ for f in *; do
 done
 
 echo "Pushing OCI artifact to %s"
-oras push --insecure %s \
+ORAS_OUTPUT=$(oras push --insecure %s \
   --artifact-type %s \
   %s \
-  $FILES
+  $FILES 2>&1)
+echo "$ORAS_OUTPUT"
 
-echo "OCI_ARTIFACT_REF=%s" > $(results.oci-ref.path)
+DIGEST=$(echo "$ORAS_OUTPUT" | grep -o 'sha256:[a-f0-9]*' | tail -1)
+echo "%s" > $(results.oci-ref.path)
+echo "$DIGEST" > $(results.oci-digest.path)
 `, bj.Spec.Artifacts.Path, mediaType, ref, ShellQuote(ref), ShellQuote(mediaType), annotationFlags, ref)
 
 	ociEnv := make([]interface{}, len(envVars), len(envVars)+2)
@@ -522,6 +539,10 @@ echo "OCI_ARTIFACT_REF=%s" > $(results.oci-ref.path)
 			map[string]interface{}{
 				"name":        "oci-ref",
 				"description": "Full OCI reference of the pushed artifact",
+			},
+			map[string]interface{}{
+				"name":        "oci-digest",
+				"description": "Immutable digest of the pushed manifest",
 			},
 		},
 		"steps": []interface{}{step},

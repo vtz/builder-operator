@@ -162,6 +162,8 @@ spec:
                   type: string
                 ociArtifactRef:
                   type: string
+                ociArtifactDigest:
+                  type: string
                 failureReason:
                   type: string
                 commitSHA:

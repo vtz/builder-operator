@@ -303,8 +303,15 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 		}
 		name, _, _ := unstructured.NestedString(m, "name")
 		value, _, _ := unstructured.NestedString(m, "value")
-		if name == "commit-sha" && value != "" {
-			bj.Status.CommitSHA = value
+		switch name {
+		case "commit-sha":
+			if value != "" {
+				bj.Status.CommitSHA = value
+			}
+		case "oci-digest":
+			if value != "" {
+				bj.Status.OCIArtifactDigest = strings.TrimSpace(value)
+			}
 		}
 	}
 }

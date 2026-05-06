@@ -171,6 +171,8 @@ type BuildJobStatus struct {
 	// +optional
 	OCIArtifactRef string `json:"ociArtifactRef,omitempty"`
 	// +optional
+	OCIArtifactDigest string `json:"ociArtifactDigest,omitempty"`
+	// +optional
 	FailureReason string `json:"failureReason,omitempty"`
 	// +optional
 	Stages []StageStatus `json:"stages,omitempty"`

@@ -34,9 +34,17 @@ func newArtifactsCmd() *cobra.Command {
 
 			if build.OCIArtifactRef != "" {
 				fmt.Printf("Artifacts pushed as OCI artifact:\n\n")
-				fmt.Printf("  %s\n\n", build.OCIArtifactRef)
+				fmt.Printf("  Reference:  %s\n", build.OCIArtifactRef)
+				if build.OCIArtifactDigest != "" {
+					fmt.Printf("  Digest:     %s\n", build.OCIArtifactDigest)
+				}
+				fmt.Println()
 				fmt.Printf("Pull with:\n")
-				fmt.Printf("  oras pull %s --output ./\n\n", build.OCIArtifactRef)
+				if build.OCIArtifactDigest != "" {
+					fmt.Printf("  oras pull %s@%s --output ./\n\n", build.OCIArtifactRef, build.OCIArtifactDigest)
+				} else {
+					fmt.Printf("  oras pull %s --output ./\n\n", build.OCIArtifactRef)
+				}
 				fmt.Printf("Inspect manifest:\n")
 				fmt.Printf("  oras manifest fetch %s | jq\n", build.OCIArtifactRef)
 				return nil
