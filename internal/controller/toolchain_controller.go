@@ -81,8 +81,8 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		phase := r.taskRunPhase(&tr)
 		switch phase {
-		case "Succeeded":
-			digest := r.extractTaskRunResult(&tr, "IMAGE_DIGEST")
+		case conditionTypeSucceeded:
+			digest := r.extractImageDigest(&tr)
 			tc.Status.Phase = buildv1alpha1.ToolchainPhaseReady
 			tc.Status.ResolvedDigest = digest
 			tc.Status.LastBuildTime = time.Now().UTC().Format(time.RFC3339)
@@ -97,7 +97,7 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 			ToolchainBuildsTotal.WithLabelValues(tc.Namespace, "succeeded").Inc()
 			return ctrl.Result{}, nil
-		case "Failed":
+		case CachePhaseFailed:
 			tc.Status.Phase = buildv1alpha1.ToolchainPhaseFailed
 			tc.Status.CurrentBuildRun = ""
 			tc.Status.Conditions = mergeCondition(tc.Status.Conditions,
@@ -219,7 +219,7 @@ echo "Toolchain image pushed: %s"
 
 	return &unstructured.Unstructured{Object: obj}
 }
-func (r *ToolchainReconciler) extractTaskRunResult(tr *unstructured.Unstructured, name string) string {
+func (r *ToolchainReconciler) extractImageDigest(tr *unstructured.Unstructured) string {
 	results, _, _ := unstructured.NestedSlice(tr.Object, "status", "results")
 	for _, entry := range results {
 		m, ok := entry.(map[string]interface{})
@@ -228,7 +228,7 @@ func (r *ToolchainReconciler) extractTaskRunResult(tr *unstructured.Unstructured
 		}
 		n, _, _ := unstructured.NestedString(m, "name")
 		v, _, _ := unstructured.NestedString(m, "value")
-		if n == name && v != "" {
+		if n == "IMAGE_DIGEST" && v != "" {
 			return v
 		}
 	}
@@ -244,16 +244,16 @@ func (r *ToolchainReconciler) taskRunPhase(tr *unstructured.Unstructured) string
 		}
 		t, _, _ := unstructured.NestedString(m, "type")
 		s, _, _ := unstructured.NestedString(m, "status")
-		if t == "Succeeded" {
+		if t == conditionTypeSucceeded {
 			switch s {
-			case "True":
-				return "Succeeded"
-			case "False":
-				return "Failed"
+			case conditionStatusTrue:
+				return conditionTypeSucceeded
+			case conditionStatusFalse:
+				return CachePhaseFailed
 			}
 		}
 	}
-	return "Running"
+	return conditionReasonRunning
 }
 
 var taskRunGVK = schema.GroupVersionKind{

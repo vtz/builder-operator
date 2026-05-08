@@ -79,7 +79,7 @@ func (c *Client) Run(ctx context.Context, name string) (*buildapi.BuildJobSummar
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -107,7 +107,7 @@ func (c *Client) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("executing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
@@ -130,7 +130,7 @@ func (c *Client) Logs(ctx context.Context, name string) (io.ReadCloser, error) {
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(body))
 	}
 	return resp.Body, nil
@@ -163,7 +163,7 @@ func (c *Client) DownloadArtifact(ctx context.Context, name, filename string) (i
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(body))
 	}
 	return resp.Body, nil
@@ -180,7 +180,7 @@ func (c *Client) doGet(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

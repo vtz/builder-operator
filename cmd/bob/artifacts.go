@@ -94,12 +94,12 @@ func downloadAllArtifacts(ctx context.Context, c *bobclient.Client, name string,
 		outPath := filepath.Join(dir, f.Name)
 		out, err := os.Create(outPath)
 		if err != nil {
-			body.Close()
+			_ = body.Close()
 			return fmt.Errorf("creating %s: %w", outPath, err)
 		}
 		_, err = io.Copy(out, body)
-		body.Close()
-		out.Close()
+		_ = body.Close()
+		_ = out.Close()
 		if err != nil {
 			return fmt.Errorf("writing %s: %w", outPath, err)
 		}

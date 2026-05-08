@@ -1,5 +1,3 @@
-version: 2
-
 run:
   timeout: 5m
   allow-parallel-runners: true
@@ -10,6 +8,9 @@ issues:
     - path: "internal/*"
       linters:
         - dupl
+    - path: "_test\\.go"
+      linters:
+        - errcheck
 
 linters:
   disable-all: true
@@ -31,6 +32,14 @@ linters:
     - unused
 
 linters-settings:
+  errcheck:
+    exclude-functions:
+      - fmt.Fprint
+      - fmt.Fprintf
+      - fmt.Fprintln
+      - (net/http.ResponseWriter).Write
+      - (*text/tabwriter.Writer).Flush
+      - io.Copy(os.Stdout)
   revive:
     rules:
       - name: comment-spacings

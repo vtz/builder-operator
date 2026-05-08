@@ -22,7 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestArchToK8s(t *testing.T) {
@@ -356,6 +355,3 @@ func TestComputeOCIRef_NilOCI(t *testing.T) {
 	}
 }
 
-func newFakeReconcilerWithObjs(objs ...client.Object) *BuildJobReconciler {
-	return newFakeReconciler(objs...)
-}

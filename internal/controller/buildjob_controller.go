@@ -48,11 +48,15 @@ type BuildJobReconciler struct {
 	Recorder       record.EventRecorder
 }
 
-const runAtAnnotation = buildv1alpha1.AnnotationRunAt
+const (
+	runAtAnnotation         = buildv1alpha1.AnnotationRunAt
+	conditionTypeSucceeded  = "Succeeded"
+	conditionStatusTrue     = "True"
+	conditionStatusFalse    = "False"
+	conditionReasonRunning  = "Running"
+)
 
 func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
 	var bj buildv1alpha1.BuildJob
 	if err := r.Get(ctx, req.NamespacedName, &bj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -69,113 +73,7 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if needsNewRun {
-		if active := r.findActivePipelineRun(ctx, &bj); active != nil {
-			logger.Info("adopting existing PipelineRun", "name", active.GetName())
-			bj.Status.CurrentPipelineRun = active.GetName()
-			bj.Status.Phase = buildv1alpha1.PhasePending
-			bj.Status.LastRunAt = bj.Annotations[runAtAnnotation]
-			r.syncStatusFromPipelineRun(&bj, active)
-			if err := r.Status().Update(ctx, &bj); err != nil {
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-			}
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-
-		if err := r.ensureCachePVCs(ctx, &bj); err != nil {
-			return ctrl.Result{}, fmt.Errorf("ensuring cache PVCs: %w", err)
-		}
-
-		if err := r.validateSourcePVC(ctx, &bj); err != nil {
-			bj.Status.Phase = buildv1alpha1.PhaseFailed
-			bj.Status.FailureReason = "SourcePVCNotFound"
-			bj.Status.Conditions = mergeCondition(
-				bj.Status.Conditions,
-				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "SourcePVCNotFound", err.Error(), bj.Generation),
-			)
-			if statusErr := r.Status().Update(ctx, &bj); statusErr != nil {
-				return ctrl.Result{}, fmt.Errorf("updating status for missing source PVC: %w", statusErr)
-			}
-			return ctrl.Result{}, nil
-		}
-
-		runN := r.nextRunNumber(ctx, &bj)
-		pipelineRun := tekton.BuildPipelineRunWithConfig(&bj, runN, r.PipelineConfig)
-
-		nodeSelector := map[string]interface{}{}
-
-		k8sArch, archErr := archToK8s(bj.Spec.Target.Architecture)
-		if archErr != nil {
-			bj.Status.Phase = buildv1alpha1.PhaseFailed
-			bj.Status.FailureReason = "UnsupportedArchitecture"
-			bj.Status.Conditions = mergeCondition(
-				bj.Status.Conditions,
-				buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "UnsupportedArchitecture", archErr.Error(), bj.Generation),
-			)
-			if statusErr := r.Status().Update(ctx, &bj); statusErr != nil {
-				return ctrl.Result{}, fmt.Errorf("updating status for unsupported architecture: %w", statusErr)
-			}
-			if r.Recorder != nil {
-				r.Recorder.Eventf(&bj, corev1.EventTypeWarning, "UnsupportedArchitecture", "%v", archErr)
-			}
-			return ctrl.Result{}, nil
-		}
-		if k8sArch != "" {
-			nodeSelector["kubernetes.io/arch"] = k8sArch
-		}
-
-		if len(bj.Spec.Caches) > 0 {
-			if cacheSelector := r.cacheNodeSelector(ctx, &bj); cacheSelector != nil {
-				for k, v := range cacheSelector {
-					nodeSelector[k] = v
-				}
-			}
-		}
-
-		if bj.Spec.Source.Type == buildv1alpha1.SourceTypePVC && bj.Spec.Source.PVC != nil {
-			if srcSelector := r.pvcNodeSelector(ctx, bj.Namespace, bj.Spec.Source.PVC.ClaimName); srcSelector != nil {
-				for k, v := range srcSelector {
-					nodeSelector[k] = v
-				}
-			}
-		}
-
-		if len(nodeSelector) > 0 {
-			if err := unstructured.SetNestedField(pipelineRun.Object, nodeSelector, "spec", "taskRunTemplate", "podTemplate", "nodeSelector"); err != nil {
-				logger.Error(err, "failed to set nodeSelector")
-			}
-		}
-		if err := ctrl.SetControllerReference(&bj, pipelineRun, r.Scheme); err != nil {
-			return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
-		}
-		if err := r.Create(ctx, pipelineRun); err != nil {
-			if apierrors.IsAlreadyExists(err) {
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-			}
-			return ctrl.Result{}, fmt.Errorf("creating PipelineRun: %w", err)
-		}
-
-		bj.Status.CurrentPipelineRun = pipelineRun.GetName()
-		bj.Status.RunCount = runN
-		bj.Status.Phase = buildv1alpha1.PhasePending
-		bj.Status.LastRunAt = bj.Annotations[runAtAnnotation]
-		bj.Status.FailureReason = ""
-		bj.Status.CommitSHA = ""
-		bj.Status.Conditions = mergeCondition(
-			bj.Status.Conditions,
-			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunCreated", "PipelineRun created for BuildJob", bj.Generation),
-		)
-		if err := r.Status().Update(ctx, &bj); err != nil {
-			logger.Error(err, "status update failed after creating PipelineRun; will adopt on next reconcile", "pipelineRun", pipelineRun.GetName())
-			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-		}
-		logger.Info("created PipelineRun", "name", pipelineRun.GetName(), "run", runN)
-		if r.Recorder != nil {
-			r.Recorder.Eventf(&bj, corev1.EventTypeNormal, "PipelineRunCreated",
-				"Created PipelineRun %s (run #%d)", pipelineRun.GetName(), runN)
-		}
-		BuildsTotal.WithLabelValues(bj.Namespace, "started").Inc()
-		ActiveBuilds.WithLabelValues(bj.Namespace).Inc()
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return r.createNewPipelineRun(ctx, &bj)
 	}
 
 	var pr unstructured.Unstructured
@@ -222,11 +120,137 @@ func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
+func (r *BuildJobReconciler) createNewPipelineRun(ctx context.Context, bj *buildv1alpha1.BuildJob) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	if active := r.findActivePipelineRun(ctx, bj); active != nil {
+		logger.Info("adopting existing PipelineRun", "name", active.GetName())
+		bj.Status.CurrentPipelineRun = active.GetName()
+		bj.Status.Phase = buildv1alpha1.PhasePending
+		bj.Status.LastRunAt = bj.Annotations[runAtAnnotation]
+		r.syncStatusFromPipelineRun(bj, active)
+		if err := r.Status().Update(ctx, bj); err != nil {
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	if err := r.ensureCachePVCs(ctx, bj); err != nil {
+		return ctrl.Result{}, fmt.Errorf("ensuring cache PVCs: %w", err)
+	}
+
+	if err := r.validateSourcePVC(ctx, bj); err != nil {
+		bj.Status.Phase = buildv1alpha1.PhaseFailed
+		bj.Status.FailureReason = "SourcePVCNotFound"
+		bj.Status.Conditions = mergeCondition(
+			bj.Status.Conditions,
+			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "SourcePVCNotFound", err.Error(), bj.Generation),
+		)
+		if statusErr := r.Status().Update(ctx, bj); statusErr != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status for missing source PVC: %w", statusErr)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if bj.Spec.Artifacts.Destination == buildv1alpha1.ArtifactDestinationOCI && bj.Spec.Artifacts.OCI == nil {
+		bj.Status.Phase = buildv1alpha1.PhaseFailed
+		bj.Status.FailureReason = "InvalidOCIConfig"
+		bj.Status.Conditions = mergeCondition(
+			bj.Status.Conditions,
+			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "InvalidOCIConfig",
+				"spec.artifacts.destination is 'oci' but spec.artifacts.oci is not configured", bj.Generation),
+		)
+		if statusErr := r.Status().Update(ctx, bj); statusErr != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status for invalid OCI config: %w", statusErr)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	runN := r.nextRunNumber(ctx, bj)
+	pipelineRun := tekton.BuildPipelineRunWithConfig(bj, runN, r.PipelineConfig)
+
+	nodeSelector := map[string]interface{}{}
+
+	k8sArch, archErr := archToK8s(bj.Spec.Target.Architecture)
+	if archErr != nil {
+		bj.Status.Phase = buildv1alpha1.PhaseFailed
+		bj.Status.FailureReason = "UnsupportedArchitecture"
+		bj.Status.Conditions = mergeCondition(
+			bj.Status.Conditions,
+			buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "UnsupportedArchitecture", archErr.Error(), bj.Generation),
+		)
+		if statusErr := r.Status().Update(ctx, bj); statusErr != nil {
+			return ctrl.Result{}, fmt.Errorf("updating status for unsupported architecture: %w", statusErr)
+		}
+		if r.Recorder != nil {
+			r.Recorder.Eventf(bj, corev1.EventTypeWarning, "UnsupportedArchitecture", "%v", archErr)
+		}
+		return ctrl.Result{}, nil
+	}
+	if k8sArch != "" {
+		nodeSelector["kubernetes.io/arch"] = k8sArch
+	}
+
+	if len(bj.Spec.Caches) > 0 {
+		if cacheSelector := r.cacheNodeSelector(ctx, bj); cacheSelector != nil {
+			for k, v := range cacheSelector {
+				nodeSelector[k] = v
+			}
+		}
+	}
+
+	if bj.Spec.Source.Type == buildv1alpha1.SourceTypePVC && bj.Spec.Source.PVC != nil {
+		if srcSelector := r.pvcNodeSelector(ctx, bj.Namespace, bj.Spec.Source.PVC.ClaimName); srcSelector != nil {
+			for k, v := range srcSelector {
+				nodeSelector[k] = v
+			}
+		}
+	}
+
+	if len(nodeSelector) > 0 {
+		if err := unstructured.SetNestedField(pipelineRun.Object, nodeSelector, "spec", "taskRunTemplate", "podTemplate", "nodeSelector"); err != nil {
+			logger.Error(err, "failed to set nodeSelector")
+		}
+	}
+	if err := ctrl.SetControllerReference(bj, pipelineRun, r.Scheme); err != nil {
+		return ctrl.Result{}, fmt.Errorf("setting controller reference: %w", err)
+	}
+	if err := r.Create(ctx, pipelineRun); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("creating PipelineRun: %w", err)
+	}
+
+	bj.Status.CurrentPipelineRun = pipelineRun.GetName()
+	bj.Status.RunCount = runN
+	bj.Status.Phase = buildv1alpha1.PhasePending
+	bj.Status.LastRunAt = bj.Annotations[runAtAnnotation]
+	bj.Status.FailureReason = ""
+	bj.Status.CommitSHA = ""
+	bj.Status.Conditions = mergeCondition(
+		bj.Status.Conditions,
+		buildv1alpha1.NewCondition("Ready", metav1.ConditionFalse, "PipelineRunCreated", "PipelineRun created for BuildJob", bj.Generation),
+	)
+	if err := r.Status().Update(ctx, bj); err != nil {
+		logger.Error(err, "status update failed after creating PipelineRun; will adopt on next reconcile", "pipelineRun", pipelineRun.GetName())
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+	}
+	logger.Info("created PipelineRun", "name", pipelineRun.GetName(), "run", runN)
+	if r.Recorder != nil {
+		r.Recorder.Eventf(bj, corev1.EventTypeNormal, "PipelineRunCreated",
+			"Created PipelineRun %s (run #%d)", pipelineRun.GetName(), runN)
+	}
+	BuildsTotal.WithLabelValues(bj.Namespace, "started").Inc()
+	ActiveBuilds.WithLabelValues(bj.Namespace).Inc()
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+}
+
 func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJob, pr *unstructured.Unstructured) {
 	conditions, _, _ := unstructured.NestedSlice(pr.Object, "status", "conditions")
 	phase := buildv1alpha1.PhaseRunning
 	readyStatus := metav1.ConditionFalse
-	reason := "Running"
+	reason := conditionReasonRunning
 	message := "PipelineRun is in progress"
 
 	for _, c := range conditions {
@@ -238,14 +262,14 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 		s, _, _ := unstructured.NestedString(m, "status")
 		rn, _, _ := unstructured.NestedString(m, "reason")
 		msg, _, _ := unstructured.NestedString(m, "message")
-		if t == "Succeeded" {
+		if t == conditionTypeSucceeded {
 			switch s {
-			case "True":
+			case conditionStatusTrue:
 				phase = buildv1alpha1.PhaseSucceeded
 				readyStatus = metav1.ConditionTrue
 				reason = rn
 				message = msg
-			case "False":
+			case conditionStatusFalse:
 				phase = buildv1alpha1.PhaseFailed
 				readyStatus = metav1.ConditionFalse
 				reason = rn
@@ -362,7 +386,7 @@ func (r *BuildJobReconciler) findActivePipelineRun(ctx context.Context, bj *buil
 			}
 			t, _, _ := unstructured.NestedString(m, "type")
 			s, _, _ := unstructured.NestedString(m, "status")
-			if t == "Succeeded" && (s == "True" || s == "False") {
+			if t == conditionTypeSucceeded && (s == conditionStatusTrue || s == conditionStatusFalse) {
 				terminated = true
 				break
 			}

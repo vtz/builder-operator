@@ -33,7 +33,7 @@ func newLogsCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("fetching logs: %w", err)
 			}
-			defer reader.Close()
+			defer func() { _ = reader.Close() }()
 
 			_, err = io.Copy(os.Stdout, reader)
 			return err

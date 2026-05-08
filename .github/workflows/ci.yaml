@@ -29,6 +29,8 @@ jobs:
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
         with:
           name: coverage
           path: coverage.out
