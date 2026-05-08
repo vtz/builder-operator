@@ -26,6 +26,12 @@ const (
 	TektonAPIVersion = "tekton.dev/v1"
 	PipelineRunKind  = "PipelineRun"
 	GitCloneImage    = "alpine/git:latest"
+	OrasImage        = "ghcr.io/oras-project/oras:v1.2.0"
+
+	workspaceName     = "shared-workspace"
+	taskWorkspaceName = "ws"
+
+	DefaultFirmwareMediaType = "application/vnd.auto.firmware.layer.v1"
 )
 
 type PipelineConfig struct {
@@ -45,7 +51,7 @@ func BuildPipelineRunN(bj *buildv1alpha1.BuildJob, runN int64) *unstructured.Uns
 
 func BuildPipelineRunWithConfig(bj *buildv1alpha1.BuildJob, runN int64, cfg PipelineConfig) *unstructured.Unstructured {
 	labels := map[string]interface{}{
-		"builder.sdv.cloud.redhat.com/buildjob": bj.Name,
+		buildv1alpha1.LabelBuildJob: bj.Name,
 	}
 
 	prName := fmt.Sprintf("%s-run%d", bj.Name, runN)
@@ -73,7 +79,7 @@ git clone %s source
 cd source
 git checkout %s
 git rev-parse HEAD > $(results.commit-sha.path)
-`, shellQuote(bj.Spec.Source.Git.URL), shellQuote(rev))
+`, ShellQuote(bj.Spec.Source.Git.URL), ShellQuote(rev))
 		cloneTask := buildCloneTaskSpec("clone", GitCloneImage, cloneScript, envVars)
 		tasks = append(tasks, cloneTask)
 		prevStage = "clone"
@@ -111,7 +117,12 @@ echo "Copied PVC source to workspace"
 	}
 
 	if bj.Spec.Artifacts.Path != "" {
-		uploadScript := fmt.Sprintf(`#!/usr/bin/env bash
+		switch bj.Spec.Artifacts.Destination {
+		case buildv1alpha1.ArtifactDestinationOCI:
+			ociTask := buildOCIArtifactTask(bj, envVars, prevStage)
+			tasks = append(tasks, ociTask)
+		default:
+			uploadScript := fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 cd $(workspaces.ws.path)
 ARTIFACTS_DIR=%q
@@ -138,29 +149,32 @@ if r.status >= 400:
     sys.exit(1)
 "`, bj.Spec.Artifacts.Path)
 
-		apiHost := cfg.APIHost
-		if apiHost == "" {
-			apiHost = "bob-api.bob-system.svc"
+			apiHost := cfg.APIHost
+			if apiHost == "" {
+				apiHost = "bob-api.bob-system.svc"
+			}
+			apiPort := cfg.APIPort
+			if apiPort == "" {
+				apiPort = "8082"
+			}
+			collectEnv := make([]interface{}, len(envVars), len(envVars)+3)
+			copy(collectEnv, envVars)
+			collectEnv = append(collectEnv,
+				map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
+				map[string]interface{}{"name": "BOB_API_HOST", "value": apiHost},
+				map[string]interface{}{"name": "BOB_API_PORT", "value": apiPort},
+			)
+			collectTask := buildCollectTask(image, uploadScript, collectEnv, prevStage)
+			tasks = append(tasks, collectTask)
 		}
-		apiPort := cfg.APIPort
-		if apiPort == "" {
-			apiPort = "8082"
-		}
-		collectEnv := append(envVars,
-			map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
-			map[string]interface{}{"name": "BOB_API_HOST", "value": apiHost},
-			map[string]interface{}{"name": "BOB_API_PORT", "value": apiPort},
-		)
-		collectTask := buildCollectTask(image, uploadScript, collectEnv, prevStage)
-		tasks = append(tasks, collectTask)
 	}
 
 	pipelineWorkspaces := []interface{}{
-		map[string]interface{}{"name": "shared-workspace"},
+		map[string]interface{}{"name": workspaceName},
 	}
 	runWorkspaces := []interface{}{
 		map[string]interface{}{
-			"name": "shared-workspace",
+			"name": workspaceName,
 			"volumeClaimTemplate": map[string]interface{}{
 				"spec": map[string]interface{}{
 					"accessModes": []interface{}{"ReadWriteOnce"},
@@ -182,13 +196,27 @@ if r.status >= 400:
 		"tasks":      tasks,
 	}
 
+	var pipelineResults []interface{}
 	if bj.Spec.Source.Type == buildv1alpha1.SourceTypeGit && bj.Spec.Source.Git != nil {
-		pipelineSpec["results"] = []interface{}{
+		pipelineResults = append(pipelineResults, map[string]interface{}{
+			"name":  "commit-sha",
+			"value": "$(tasks.clone.results.commit-sha)",
+		})
+	}
+	if bj.Spec.Artifacts.Destination == buildv1alpha1.ArtifactDestinationOCI && bj.Spec.Artifacts.OCI != nil {
+		pipelineResults = append(pipelineResults,
 			map[string]interface{}{
-				"name":  "commit-sha",
-				"value": "$(tasks.clone.results.commit-sha)",
+				"name":  "oci-ref",
+				"value": "$(tasks.oci-push.results.oci-ref)",
 			},
-		}
+			map[string]interface{}{
+				"name":  "oci-digest",
+				"value": "$(tasks.oci-push.results.oci-digest)",
+			},
+		)
+	}
+	if len(pipelineResults) > 0 {
+		pipelineSpec["results"] = pipelineResults
 	}
 
 	spec := map[string]interface{}{
@@ -226,7 +254,7 @@ func buildCloneTaskSpec(name, image, script string, envVars []interface{}) map[s
 	allowPrivEsc := false
 	taskSpec := map[string]interface{}{
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
 		},
 		"results": []interface{}{
 			map[string]interface{}{"name": "commit-sha", "description": "The resolved git commit SHA"},
@@ -247,7 +275,7 @@ func buildCloneTaskSpec(name, image, script string, envVars []interface{}) map[s
 		"name":     name,
 		"taskSpec": taskSpec,
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
 		},
 	}
 }
@@ -256,7 +284,7 @@ func buildPVCCopyTaskSpec(name, image, script string, envVars []interface{}, cla
 	allowPrivEsc := false
 	taskSpec := map[string]interface{}{
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
 		},
 		"volumes": []interface{}{
 			map[string]interface{}{
@@ -290,7 +318,7 @@ func buildPVCCopyTaskSpec(name, image, script string, envVars []interface{}, cla
 		"name":     name,
 		"taskSpec": taskSpec,
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
 		},
 	}
 }
@@ -329,7 +357,7 @@ func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter 
 	taskSpec := map[string]interface{}{
 		"workspaces": []interface{}{
 			map[string]interface{}{
-				"name":      "ws",
+				"name":      taskWorkspaceName,
 				"mountPath": "/workspace",
 			},
 		},
@@ -344,8 +372,8 @@ func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter 
 		"taskSpec": taskSpec,
 		"workspaces": []interface{}{
 			map[string]interface{}{
-				"name":      "ws",
-				"workspace": "shared-workspace",
+				"name":      taskWorkspaceName,
+				"workspace": workspaceName,
 			},
 		},
 	}
@@ -365,7 +393,7 @@ func buildCollectTask(image, script string, envVars []interface{}, runAfter stri
 		"name": "collect-artifacts",
 		"taskSpec": map[string]interface{}{
 			"workspaces": []interface{}{
-				map[string]interface{}{"name": "ws", "mountPath": "/workspace"},
+				map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
 			},
 			"steps": []interface{}{
 				map[string]interface{}{
@@ -381,7 +409,154 @@ func buildCollectTask(image, script string, envVars []interface{}, runAfter stri
 		},
 		"runAfter": []interface{}{runAfter},
 		"workspaces": []interface{}{
-			map[string]interface{}{"name": "ws", "workspace": "shared-workspace"},
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
+		},
+	}
+}
+
+func buildOCIArtifactTask(bj *buildv1alpha1.BuildJob, envVars []interface{}, runAfter string) map[string]interface{} {
+	oci := bj.Spec.Artifacts.OCI
+	if oci == nil {
+		return nil
+	}
+
+	mediaType := oci.MediaType
+	if mediaType == "" {
+		mediaType = DefaultFirmwareMediaType
+	}
+
+	tag := oci.Tag
+	if tag == "" {
+		tag = fmt.Sprintf("%s-%d", bj.Name, bj.Generation)
+	} else {
+		tag = strings.ReplaceAll(tag, "${name}", bj.Name)
+		tag = strings.ReplaceAll(tag, "${arch}", bj.Spec.Target.Architecture)
+		tag = strings.ReplaceAll(tag, "${variant}", bj.Spec.Target.Variant)
+	}
+
+	ref := fmt.Sprintf("%s:%s", oci.Repository, tag)
+
+	annotations := map[string]string{
+		"org.opencontainers.image.title":   bj.Name,
+		"vnd.auto.target.board":            bj.Spec.Target.Board,
+		"vnd.auto.target.platform":         bj.Spec.Target.Platform,
+		"vnd.auto.target.architecture":     bj.Spec.Target.Architecture,
+		"vnd.auto.build.generation":        fmt.Sprintf("%d", bj.Generation),
+	}
+	if bj.Spec.Target.Variant != "" {
+		annotations["vnd.auto.target.variant"] = bj.Spec.Target.Variant
+	}
+
+	var annotationFlags string
+	for k, v := range annotations {
+		if v != "" {
+			annotationFlags += fmt.Sprintf(" --annotation %s=%s", ShellQuote(k), ShellQuote(v))
+		}
+	}
+
+	script := fmt.Sprintf(`#!/usr/bin/env sh
+set -eu
+export HOME=/tmp/oras-home
+mkdir -p "$HOME"
+cd $(workspaces.ws.path)
+ARTIFACTS_DIR=%q
+if [ ! -d "$ARTIFACTS_DIR" ] || [ -z "$(ls -A "$ARTIFACTS_DIR" 2>/dev/null)" ]; then
+  echo "No artifacts to push"
+  exit 0
+fi
+
+if [ -n "${REGISTRY_AUTH_FILE:-}" ]; then
+  export DOCKER_CONFIG="$HOME/.docker"
+  mkdir -p "$DOCKER_CONFIG"
+  cp "$REGISTRY_AUTH_FILE" "$DOCKER_CONFIG/config.json"
+fi
+
+cd "$ARTIFACTS_DIR"
+FILES=""
+for f in *; do
+  [ -f "$f" ] && FILES="$FILES $f:%s"
+done
+
+echo "Pushing OCI artifact to %s"
+ORAS_OUTPUT=$(oras push --insecure %s \
+  --artifact-type %s \
+  %s \
+  $FILES 2>&1)
+echo "$ORAS_OUTPUT"
+
+DIGEST=$(echo "$ORAS_OUTPUT" | grep -o 'sha256:[a-f0-9]*' | tail -1)
+echo "%s" > $(results.oci-ref.path)
+echo "$DIGEST" > $(results.oci-digest.path)
+`, bj.Spec.Artifacts.Path, mediaType, ref, ShellQuote(ref), ShellQuote(mediaType), annotationFlags, ref)
+
+	ociEnv := make([]interface{}, len(envVars), len(envVars)+2)
+	copy(ociEnv, envVars)
+	ociEnv = append(ociEnv,
+		map[string]interface{}{"name": "ARTIFACTS_DIR", "value": bj.Spec.Artifacts.Path},
+	)
+
+	volumes := []interface{}{}
+	volumeMounts := []interface{}{}
+	if oci.PushSecret != nil {
+		ociEnv = append(ociEnv,
+			map[string]interface{}{"name": "REGISTRY_AUTH_FILE", "value": "/etc/oci-push-secret/.dockerconfigjson"},
+		)
+		volumes = append(volumes, map[string]interface{}{
+			"name": "push-secret",
+			"secret": map[string]interface{}{
+				"secretName": oci.PushSecret.Name,
+			},
+		})
+		volumeMounts = append(volumeMounts, map[string]interface{}{
+			"name":      "push-secret",
+			"mountPath": "/etc/oci-push-secret",
+			"readOnly":  true,
+		})
+	}
+
+	allowPrivEsc := false
+	var runAsUser int64 = 1000
+	step := map[string]interface{}{
+		"name":  "oras-push",
+		"image": OrasImage,
+		"env":   ociEnv,
+		"securityContext": map[string]interface{}{
+			"allowPrivilegeEscalation": allowPrivEsc,
+			"runAsNonRoot":             true,
+			"runAsUser":                runAsUser,
+		},
+		"script": script,
+	}
+	if len(volumeMounts) > 0 {
+		step["volumeMounts"] = volumeMounts
+	}
+
+	taskSpec := map[string]interface{}{
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
+		},
+		"results": []interface{}{
+			map[string]interface{}{
+				"name":        "oci-ref",
+				"description": "Full OCI reference of the pushed artifact",
+			},
+			map[string]interface{}{
+				"name":        "oci-digest",
+				"description": "Immutable digest of the pushed manifest",
+			},
+		},
+		"steps": []interface{}{step},
+	}
+	if len(volumes) > 0 {
+		taskSpec["volumes"] = volumes
+	}
+
+	return map[string]interface{}{
+		"name":     "oci-push",
+		"taskSpec": taskSpec,
+		"runAfter": []interface{}{runAfter},
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
 		},
 	}
 }
@@ -411,6 +586,6 @@ func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {
 	return vars
 }
 
-func shellQuote(s string) string {
+func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }

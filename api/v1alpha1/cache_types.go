@@ -47,7 +47,11 @@ type CacheCRStatus struct {
 	// +optional
 	Phase string `json:"phase,omitempty"`
 	// +optional
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

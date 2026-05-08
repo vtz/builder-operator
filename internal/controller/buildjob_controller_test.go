@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"fmt"
 	"testing"
 
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
@@ -68,8 +69,9 @@ func TestSyncStatusFromPipelineRun_SetsSucceeded(t *testing.T) {
 	if bj.Status.Phase != buildv1alpha1.PhaseSucceeded {
 		t.Fatalf("expected phase Succeeded, got %s", bj.Status.Phase)
 	}
-	if bj.Status.ArtifactURI != "/workspace/artifacts" {
-		t.Fatalf("expected artifact URI to be populated, got %q", bj.Status.ArtifactURI)
+	expectedArtifactURI := fmt.Sprintf("/v1/namespaces/%s/buildjobs/%s/artifacts", bj.Namespace, bj.Name)
+	if bj.Status.ArtifactURI != expectedArtifactURI {
+		t.Fatalf("expected artifact URI %q, got %q", expectedArtifactURI, bj.Status.ArtifactURI)
 	}
 	if len(bj.Status.Stages) != 1 {
 		t.Fatalf("expected one stage status, got %d", len(bj.Status.Stages))

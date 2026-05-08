@@ -130,13 +130,14 @@ func TestBuildTaskRun_InlineDockerfile(t *testing.T) {
 	}
 
 	step := steps[0].(map[string]interface{})
-	if step["image"] != BuildahImage {
-		t.Fatalf("expected pinned buildah image %s, got %v", BuildahImage, step["image"])
+	expectedImage := "quay.io/buildah/stable:v1.39.0"
+	if step["image"] != expectedImage {
+		t.Fatalf("expected pinned buildah image %s, got %v", expectedImage, step["image"])
 	}
 
 	script := step["script"].(string)
-	if !strings.Contains(script, "FROM ubuntu:24.04") {
-		t.Fatal("script should contain the inline Dockerfile")
+	if !strings.Contains(script, "base64 -d") {
+		t.Fatal("script should decode base64-encoded Dockerfile")
 	}
 	if !strings.Contains(script, "buildah bud") {
 		t.Fatal("script should use buildah bud")
@@ -308,8 +309,46 @@ func TestBuildTaskRun_PinnedImage(t *testing.T) {
 	if strings.Contains(image, ":latest") {
 		t.Fatalf("buildah image should be pinned, not :latest — got %q", image)
 	}
-	if image != BuildahImage {
-		t.Fatalf("expected BuildahImage constant %q, got %q", BuildahImage, image)
+	expectedBuildahImage := "quay.io/buildah/stable:v1.39.0"
+	if image != expectedBuildahImage {
+		t.Fatalf("expected buildah image constant %q, got %q", expectedBuildahImage, image)
+	}
+}
+
+func TestBuildTaskRun_RootlessSecurityContext(t *testing.T) {
+	r := &ToolchainReconciler{}
+	tc := &buildv1alpha1.Toolchain{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-sec", Namespace: "default", Generation: 1},
+		Spec: buildv1alpha1.ToolchainCRSpec{
+			Image: "registry.example.com/test:v1",
+			Build: &buildv1alpha1.ToolchainBuildSpec{
+				Dockerfile: "FROM scratch\n",
+			},
+		},
+	}
+	tr := r.buildTaskRun(tc, "tc-test-sec-1")
+	spec := tr.Object["spec"].(map[string]interface{})
+	taskSpec := spec["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+
+	sc := step["securityContext"].(map[string]interface{})
+	if priv, ok := sc["privileged"]; ok && priv == true {
+		t.Fatal("container must not be privileged — use rootless buildah")
+	}
+	if runAsNonRoot, ok := sc["runAsNonRoot"]; !ok || runAsNonRoot != true {
+		t.Fatal("container must set runAsNonRoot: true")
+	}
+	if uid, ok := sc["runAsUser"]; !ok || uid == int64(0) {
+		t.Fatal("container must not run as root (uid 0)")
+	}
+
+	script := step["script"].(string)
+	if !strings.Contains(script, "--isolation=rootless") {
+		t.Fatal("buildah must use --isolation=rootless")
+	}
+	if strings.Contains(script, "--isolation=chroot") {
+		t.Fatal("buildah must not use --isolation=chroot")
 	}
 }
 

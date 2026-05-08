@@ -105,6 +105,20 @@ func setupEnvtest() {
 		panic(fmt.Sprintf("failed to set up Toolchain reconciler: %v", err))
 	}
 
+	if err := (&BuildConfigReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		panic(fmt.Sprintf("failed to set up BuildConfig reconciler: %v", err))
+	}
+
+	if err := (&CacheReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		panic(fmt.Sprintf("failed to set up Cache reconciler: %v", err))
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelMgr = cancel
 	go func() {

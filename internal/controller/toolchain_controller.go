@@ -16,15 +16,19 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
+	"github.com/centos-automotive-suite/bob/internal/tekton"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -32,7 +36,8 @@ import (
 
 type ToolchainReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -42,6 +47,8 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Get(ctx, req.NamespacedName, &tc); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	tc.Status.ObservedGeneration = tc.Generation
 
 	if tc.Spec.Build == nil {
 		if tc.Status.Phase != buildv1alpha1.ToolchainPhaseReady {
@@ -55,7 +62,6 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	// Build is requested — check if we already have a TaskRun for this generation.
 	if tc.Status.CurrentBuildRun != "" {
 		var tr unstructured.Unstructured
 		tr.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "TaskRun"})
@@ -86,6 +92,10 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, fmt.Errorf("updating status after build success: %w", err)
 			}
 			logger.Info("toolchain image built successfully", "image", tc.Spec.Image)
+			if r.Recorder != nil {
+				r.Recorder.Eventf(&tc, corev1.EventTypeNormal, "BuildSucceeded", "Toolchain image %s built and pushed", tc.Spec.Image)
+			}
+			ToolchainBuildsTotal.WithLabelValues(tc.Namespace, "succeeded").Inc()
 			return ctrl.Result{}, nil
 		case "Failed":
 			tc.Status.Phase = buildv1alpha1.ToolchainPhaseFailed
@@ -95,18 +105,20 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			if err := r.Status().Update(ctx, &tc); err != nil {
 				return ctrl.Result{RequeueAfter: 2 * time.Second}, fmt.Errorf("updating status after build failure: %w", err)
 			}
+			if r.Recorder != nil {
+				r.Recorder.Event(&tc, corev1.EventTypeWarning, "BuildFailed", "Toolchain image build failed")
+			}
+			ToolchainBuildsTotal.WithLabelValues(tc.Namespace, "failed").Inc()
 			return ctrl.Result{}, nil
 		default:
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 	}
 
-	// Don't retry automatically after failure — require a spec change.
 	if tc.Status.Phase == buildv1alpha1.ToolchainPhaseFailed {
 		return ctrl.Result{}, nil
 	}
 
-	// No existing build — create a Buildah TaskRun.
 	trName := fmt.Sprintf("tc-%s-%d", tc.Name, time.Now().Unix())
 	taskRun := r.buildTaskRun(&tc, trName)
 	if err := ctrl.SetControllerReference(&tc, taskRun, r.Scheme); err != nil {
@@ -133,29 +145,31 @@ func (r *ToolchainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 	logger.Info("created toolchain build TaskRun", "name", trName, "image", tc.Spec.Image)
+	if r.Recorder != nil {
+		r.Recorder.Eventf(&tc, corev1.EventTypeNormal, "BuildStarted", "Started toolchain build TaskRun %s for image %s", trName, tc.Spec.Image)
+	}
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
-const BuildahImage = "quay.io/buildah/stable:v1.39.0"
+const buildahImage = "quay.io/buildah/stable:v1.39.0"
 
 func (r *ToolchainReconciler) buildTaskRun(tc *buildv1alpha1.Toolchain, name string) *unstructured.Unstructured {
 	build := tc.Spec.Build
 
-	const budFlags = "--storage-driver=vfs --isolation=chroot"
+	const budFlags = "--storage-driver=vfs --isolation=rootless"
 	const pushFlags = "--storage-driver=vfs"
 
 	var script string
 	if build.Dockerfile != "" {
+		encoded := base64.StdEncoding.EncodeToString([]byte(build.Dockerfile))
 		script = fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 CONTEXT_DIR=$(mktemp -d)
-cat > "$CONTEXT_DIR/Dockerfile" << 'DOCKERFILE_EOF'
-%s
-DOCKERFILE_EOF
+echo '%s' | base64 -d > "$CONTEXT_DIR/Dockerfile"
 buildah bud %s -t %s -f "$CONTEXT_DIR/Dockerfile" "$CONTEXT_DIR"
 buildah push %s %s
 echo "Toolchain image pushed: %s"
-`, build.Dockerfile, budFlags, tc.Spec.Image, pushFlags, tc.Spec.Image, tc.Spec.Image)
+`, encoded, budFlags, tc.Spec.Image, pushFlags, tc.Spec.Image, tc.Spec.Image)
 	} else if build.ContextGit != nil {
 		dockerfilePath := build.DockerfilePath
 		if dockerfilePath == "" {
@@ -168,11 +182,11 @@ echo "Toolchain image pushed: %s"
 		script = fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 CONTEXT_DIR=$(mktemp -d)
-git clone --branch '%s' --depth 1 '%s' "$CONTEXT_DIR"
+git clone --branch %s --depth 1 %s "$CONTEXT_DIR"
 buildah bud %s -t %s -f "$CONTEXT_DIR/%s" "$CONTEXT_DIR"
 buildah push %s %s
 echo "Toolchain image pushed: %s"
-`, rev, build.ContextGit.URL, budFlags, tc.Spec.Image, dockerfilePath, pushFlags, tc.Spec.Image, tc.Spec.Image)
+`, tekton.ShellQuote(rev), tekton.ShellQuote(build.ContextGit.URL), budFlags, tc.Spec.Image, dockerfilePath, pushFlags, tc.Spec.Image, tc.Spec.Image)
 	}
 
 	obj := map[string]interface{}{
@@ -182,20 +196,20 @@ echo "Toolchain image pushed: %s"
 			"name":      name,
 			"namespace": tc.Namespace,
 			"labels": map[string]interface{}{
-				"builder.sdv.cloud.redhat.com/toolchain": tc.Name,
+				buildv1alpha1.LabelToolchain: tc.Name,
 			},
 		},
 		"spec": map[string]interface{}{
-			"serviceAccountName": "pipeline",
+			"serviceAccountName": buildv1alpha1.DefaultServiceAccount,
 			"taskSpec": map[string]interface{}{
 				"steps": []interface{}{
 					map[string]interface{}{
 						"name":  "build-push",
-						"image": BuildahImage,
-						"securityContext": map[string]interface{}{
-							"privileged": true,
-							"runAsUser":  int64(0),
-						},
+						"image": buildahImage,
+					"securityContext": map[string]interface{}{
+						"runAsNonRoot": true,
+						"runAsUser":    int64(1000),
+					},
 						"script": script,
 					},
 				},
@@ -205,9 +219,6 @@ echo "Toolchain image pushed: %s"
 
 	return &unstructured.Unstructured{Object: obj}
 }
-
-// extractTaskRunResult iterates the TaskRun status.results array and returns
-// the value for the named result, or empty string if not found.
 func (r *ToolchainReconciler) extractTaskRunResult(tr *unstructured.Unstructured, name string) string {
 	results, _, _ := unstructured.NestedSlice(tr.Object, "status", "results")
 	for _, entry := range results {

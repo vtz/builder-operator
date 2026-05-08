@@ -97,20 +97,42 @@ func main() {
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
 		PipelineConfig: pipelineCfg,
+		Recorder:       mgr.GetEventRecorderFor("buildjob-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BuildJob")
 		os.Exit(1)
 	}
 
 	if err := (&controller.ToolchainReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("toolchain-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Toolchain")
 		os.Exit(1)
 	}
 
-	apiServer := buildapi.NewServer(mgr.GetClient(), apiAddr, cliDir, artifactsDir, cfg)
+	if err := (&controller.BuildConfigReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "BuildConfig")
+		os.Exit(1)
+	}
+
+	if err := (&controller.CacheReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Cache")
+		os.Exit(1)
+	}
+
+	apiServer, err := buildapi.NewServer(mgr.GetClient(), apiAddr, cliDir, artifactsDir, cfg)
+	if err != nil {
+		setupLog.Error(err, "unable to create API server")
+		os.Exit(1)
+	}
 	apiServer.MaxUploadBytes = maxUploadBytes
 	apiServer.MaxUploadFiles = maxUploadFiles
 	apiServer.MaxFileBytes = maxFileBytes

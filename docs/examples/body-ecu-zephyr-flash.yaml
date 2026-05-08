@@ -1,0 +1,47 @@
+apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
+kind: BuildJob
+metadata:
+  name: body-ecu-zephyr-flash
+  namespace: bob-builds
+spec:
+  toolchain:
+    image: ghcr.io/zephyrproject-rtos/ci-base:v0.27.4
+    serviceAccountName: build-sa
+  source:
+    type: git
+    git:
+      url: https://github.com/vtz/body-ecu
+      revision: main
+  target:
+    board: nucleo_h755zi_q
+    platform: zephyr
+    architecture: arm
+    variant: v7m
+  stages:
+    - name: fetch
+      command: "west init -l . && west update"
+    - name: build
+      command: "west build -b $BOB_BOARD src/app"
+    - name: package
+      command: |
+        mkdir -p /workspace/artifacts
+        cp build/zephyr/zephyr.bin /workspace/artifacts/
+        cp build/zephyr/zephyr.elf /workspace/artifacts/
+        cp build/zephyr/zephyr.hex /workspace/artifacts/
+    - name: flash
+      command: "j storage flash oci://${BOB_OCI_REF}"
+      image: quay.io/jumpstarter-dev/jumpstarter:latest
+  artifacts:
+    destination: oci
+    path: /workspace/artifacts
+    oci:
+      repository: quay.io/myorg/body-ecu-firmware
+      tag: "${name}-${arch}-${variant}"
+      mediaType: application/vnd.auto.firmware.layer.v1
+      pushSecret:
+        name: quay-push-creds
+  caches:
+    - name: ccache
+      mountPath: /root/.ccache
+    - name: west-modules
+      mountPath: /root/.west-modules

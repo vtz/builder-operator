@@ -101,6 +101,24 @@ type ArtifactSpec struct {
 	Destination ArtifactDestinationType `json:"destination,omitempty"`
 	// +optional
 	Path string `json:"path,omitempty"`
+	// +optional
+	OCI *OCIArtifactConfig `json:"oci,omitempty"`
+}
+
+type OCIArtifactConfig struct {
+	// Registry + repository path, e.g. "quay.io/myorg/firmware"
+	// +kubebuilder:validation:MinLength=1
+	Repository string `json:"repository"`
+	// Tag template; supports ${name}, ${arch}, ${variant} substitution.
+	// Defaults to the BuildJob name + generation.
+	// +optional
+	Tag string `json:"tag,omitempty"`
+	// Secret containing registry credentials (must have .dockerconfigjson key).
+	// +optional
+	PushSecret *SecretReference `json:"pushSecret,omitempty"`
+	// Custom media type for artifact layers. Defaults to application/vnd.auto.firmware.layer.v1.
+	// +optional
+	MediaType string `json:"mediaType,omitempty"`
 }
 
 type CacheMount struct {
@@ -151,15 +169,23 @@ type BuildJobStatus struct {
 	// +optional
 	ArtifactURI string `json:"artifactURI,omitempty"`
 	// +optional
+	OCIArtifactRef string `json:"ociArtifactRef,omitempty"`
+	// +optional
+	OCIArtifactDigest string `json:"ociArtifactDigest,omitempty"`
+	// +optional
 	FailureReason string `json:"failureReason,omitempty"`
 	// +optional
 	Stages []StageStatus `json:"stages,omitempty"`
 	// +optional
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	RunCount int64 `json:"runCount,omitempty"`
 	// +optional
 	LastRunAt string `json:"lastRunAt,omitempty"`
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

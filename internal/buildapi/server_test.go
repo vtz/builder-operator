@@ -25,7 +25,7 @@ func newTestServer(t *testing.T, objs ...runtime.Object) (*Server, *http.ServeMu
 	runtimeObjs := make([]runtime.Object, len(objs))
 	copy(runtimeObjs, objs)
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(runtimeObjs...).WithStatusSubresource(&buildv1alpha1.BuildJob{}).Build()
-	s := NewServer(cl, ":0", "", t.TempDir(), nil)
+	s, _ := NewServer(cl, ":0", "", t.TempDir(), nil)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs", s.handleList)

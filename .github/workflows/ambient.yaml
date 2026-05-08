@@ -1,0 +1,62 @@
+name: Ambient Code Platform
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  ambient-comment:
+    name: "ACP: Issue Comment"
+    if: >-
+      github.event_name == 'issue_comment' &&
+      contains(github.event.comment.body, '/ambient')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ambient-code/ambient-action@v0.0.5
+        with:
+          api-url: ${{ secrets.ACP_URL }}
+          api-token: ${{ secrets.ACP_TOKEN }}
+          project: builder-operator
+          prompt: |
+            Repository: ${{ github.repository }}
+            Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+            Body: ${{ github.event.issue.body }}
+            Comment: ${{ github.event.comment.body }}
+
+            Work on this issue. Read the CLAUDE.md at the repo root for project
+            structure, build commands, and conventions.
+          display-name: "Issue #${{ github.event.issue.number }}"
+          repos: '[{"url":"${{ github.server_url }}/${{ github.repository }}","branch":"main","autoPush":true}]'
+          workflow: '{"gitUrl":"https://github.com/ambient-code/workflows","branch":"main","path":"workflows/bugfix"}'
+          stop-on-run-finished: 'true'
+
+  ambient-label:
+    name: "ACP: Issue Labeled"
+    if: >-
+      github.event_name == 'issues' &&
+      (github.event.action == 'labeled' || github.event.action == 'opened') &&
+      contains(toJSON(github.event.issue.labels.*.name), 'ambient')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ambient-code/ambient-action@v0.0.5
+        with:
+          api-url: ${{ secrets.ACP_URL }}
+          api-token: ${{ secrets.ACP_TOKEN }}
+          project: builder-operator
+          prompt: |
+            Repository: ${{ github.repository }}
+            Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+            Body: ${{ github.event.issue.body }}
+
+            Analyze and fix this issue. Read the CLAUDE.md at the repo root for
+            project structure, build commands, and conventions.
+          display-name: "Issue #${{ github.event.issue.number }}"
+          repos: '[{"url":"${{ github.server_url }}/${{ github.repository }}","branch":"main","autoPush":true}]'
+          workflow: '{"gitUrl":"https://github.com/ambient-code/workflows","branch":"main","path":"workflows/bugfix"}'
+          stop-on-run-finished: 'true'
