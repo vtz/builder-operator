@@ -1,0 +1,213 @@
+---
+description: Agentic workflow for fixing bugs and implementing features on the body-ecu repository, including build, flash, and hardware verification via Bob and Jumpstarter.
+globs:
+alwaysApply: false
+---
+
+# Agentic Build-and-Flash Workflow for Body ECU
+
+When asked to fix a bug or implement a feature on the body-ecu codebase, follow
+this end-to-end workflow. The goal is issue-in, verified-fix-out: read the issue,
+make the change, build, flash to real hardware, verify, and close the loop.
+
+## 1. Read the Issue
+
+```bash
+gh issue view <NUMBER> --repo vtz/body-ecu
+```
+
+Parse the issue to determine:
+- **Which side is affected**: look at labels (`mcu`, `hpc`) and affected file paths.
+  - `src/app/` or anything under Zephyr → **MCU** (firmware)
+  - `source/platforms/posix-mpu/` → **HPC** (Linux userland)
+  - Both paths mentioned → **both**
+- **What the acceptance criteria are**: these tell you when the fix is done.
+
+## 2. Make the Code Change
+
+Edit the source files in the body-ecu repo. Key source layout:
+
+| Side | Source root | Build system | Output |
+|------|-----------|-------------|--------|
+| MCU  | `src/app/` | Zephyr / west | `.bin`, `.elf`, `.hex` |
+| HPC  | `source/platforms/posix-mpu/` | CMake + rpmbuild | RPM |
+
+After editing, ensure the code compiles locally if possible (e.g. `west build`
+for MCU, `cmake` for HPC) before submitting to the cluster build.
+
+## 3. Build
+
+### MCU (Zephyr firmware)
+
+```bash
+bob build body-ecu-zephyr --local --wait
+```
+
+The BuildJob uses toolchain `ghcr.io/zephyrproject-rtos/ci-base:v0.27.4`,
+targets `nucleo_h755zi_q`, and pushes the firmware as an OCI artifact.
+
+Retrieve the OCI artifact reference after build:
+
+```bash
+bob artifacts body-ecu-zephyr
+# Output includes "Reference: quay.io/myorg/body-ecu-firmware:..."
+```
+
+### HPC (RPM)
+
+```bash
+bob build body-ecu-mpu-rpm --local --wait
+```
+
+Download the RPM artifact:
+
+```bash
+bob artifacts body-ecu-mpu-rpm --download /tmp/body-ecu-rpms/
+```
+
+### Both
+
+Run MCU first (firmware is independent), then HPC. Or use the orchestration script:
+
+```bash
+./scripts/agentic-build-flash.sh --target both
+```
+
+## 4. Flash to Hardware
+
+Use Jumpstarter MCP tools (available via `jmp mcp serve`). The MCP server
+provides structured tool calls that you should prefer over raw shell commands.
+
+### MCU flash via MCP tools
+
+1. **List available boards**: call `jmp_list_exporters` to see what hardware is online.
+2. **Lease a board**: call `jmp_create_lease` with selector `board=nucleo_h755zi_q`.
+3. **Connect**: call `jmp_connect` with the lease ID.
+4. **Flash**: call `jmp_run` with `["storage", "flash", "oci://<artifact-ref>"]`.
+
+### HPC flash via ADO
+
+The HPC side uses `caib` which handles image composition and Jumpstarter flash:
+
+```bash
+caib build --target qemu-autosd --flash \
+  --extra-rpms /tmp/body-ecu-rpms/*.rpm --wait --follow
+```
+
+### Alternative: orchestration script
+
+```bash
+./scripts/agentic-build-flash.sh --target mcu --board "board=nucleo_h755zi_q"
+```
+
+## 5. Verify on Hardware
+
+After flashing, verify the fix using Jumpstarter MCP tools:
+
+### MCU verification
+
+- Call `jmp_run` with `["serial", "pipe"]` and `timeout_seconds: 15` to read serial console output.
+- Look for boot messages, Zephyr shell prompt, or application-specific output.
+- If the issue mentions specific counters or behaviors, check them via the debug shell.
+
+### HPC verification
+
+- Call `jmp_run` with `["ssh", "--", "<command>"]` to run commands on the board.
+- Common checks:
+  - `systemctl status body-ecu-mpu-hostlike` — service is active
+  - `curl -sf http://localhost:8080/healthz` — health endpoint responds
+  - `journalctl -u body-ecu-mpu-hostlike --no-pager -n 50` — recent logs
+
+### Cleanup
+
+Always disconnect and release the lease when done:
+
+1. Call `jmp_disconnect` to close the connection.
+2. Call `jmp_delete_lease` to release the hardware.
+
+## 6. Close the Loop
+
+### Commit and push
+
+```bash
+git checkout -b fix/issue-<NUMBER>
+git add -A
+git commit -m "$(cat <<'EOF'
+Fix: <short description>
+
+<explain what was wrong and how it was fixed>
+
+Verified on hardware via Jumpstarter:
+- Board: nucleo_h755zi_q
+- Flash: successful
+- <verification result summary>
+
+Fixes #<NUMBER>
+EOF
+)"
+git push -u origin HEAD
+```
+
+### Open a PR
+
+```bash
+gh pr create \
+  --title "Fix: <short description>" \
+  --body "$(cat <<'EOF'
+## Summary
+<1-2 bullet points describing the change>
+
+## Verification
+Tested on hardware via Jumpstarter flash:
+- <verification details>
+
+Fixes #<NUMBER>
+EOF
+)"
+```
+
+### Comment on the issue
+
+```bash
+gh issue comment <NUMBER> --repo vtz/body-ecu --body "$(cat <<'EOF'
+Fix implemented and verified on hardware:
+- Built via `bob build --local`
+- Flashed to nucleo_h755zi_q via Jumpstarter
+- <verification results>
+
+PR: <PR-URL>
+EOF
+)"
+```
+
+## Error Handling
+
+### Build failure
+- Read the build logs: `bob logs body-ecu-zephyr` or `bob logs body-ecu-mpu-rpm`
+- Fix the code and re-run the build.
+- Common issues: missing includes, type errors, linker failures.
+
+### Flash failure
+- Check that the board is online: `jmp_list_exporters`
+- Check lease is still valid: `jmp_list_leases`
+- Retry the flash. If the board is unresponsive, power-cycle via `jmp_run(["power", "off"])` then `jmp_run(["power", "on"])`.
+
+### Boot failure
+- Read serial output with a longer timeout.
+- If the board is bricked, flash a known-good firmware first, then retry.
+- Check that the correct board variant was targeted in the BuildJob.
+
+## Available BuildJobs
+
+| Name | Side | Target | Artifacts |
+|------|------|--------|-----------|
+| `body-ecu-zephyr` | MCU | `nucleo_h755zi_q` (Zephyr) | OCI → `quay.io/myorg/body-ecu-firmware` |
+| `body-ecu-zephyr-flash` | MCU | `nucleo_h755zi_q` (Zephyr) | OCI + auto-flash via Jumpstarter |
+| `body-ecu-mpu-rpm` | HPC | `posix` / `native` | PVC → RPMs |
+| `body-ecu-mpu-hostlike` | HPC | `posix` / `x86` | PVC → binary |
+| `body-ecu-posix-mcu` | MCU (POSIX shim) | `posix` / `native` | PVC → binary |
+| `body-ecu-native-sim` | MCU (simulator) | `native_sim/native/64` | PVC → firmware + Renode |
+
+`body-ecu-zephyr-flash` includes a `flash` stage that runs `j storage flash` using the
+Jumpstarter container image after the OCI artifact is pushed. Use this for a single-command
+build+flash when Jumpstarter client config is available in the pipeline.

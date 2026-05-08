@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "jumpstarter": {
+      "command": "jmp",
+      "args": ["mcp", "serve"]
+    }
+  }
+}

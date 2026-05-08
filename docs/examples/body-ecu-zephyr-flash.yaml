@@ -1,7 +1,7 @@
 apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
 kind: BuildJob
 metadata:
-  name: body-ecu-zephyr
+  name: body-ecu-zephyr-flash
   namespace: bob-builds
 spec:
   toolchain:
@@ -28,6 +28,9 @@ spec:
         cp build/zephyr/zephyr.bin /workspace/artifacts/
         cp build/zephyr/zephyr.elf /workspace/artifacts/
         cp build/zephyr/zephyr.hex /workspace/artifacts/
+    - name: flash
+      command: "j storage flash oci://${BOB_OCI_REF}"
+      image: quay.io/jumpstarter-dev/jumpstarter:latest
   artifacts:
     destination: oci
     path: /workspace/artifacts
