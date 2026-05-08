@@ -36,9 +36,9 @@ func newTestServer(t *testing.T, objs ...runtime.Object) (*Server, *http.ServeMu
 	return s, mux
 }
 
-func sampleBuildJob(name, ns string) *buildv1alpha1.BuildJob {
+func sampleBuildJob(name string) *buildv1alpha1.BuildJob {
 	return &buildv1alpha1.BuildJob{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "builds"},
 		Spec: buildv1alpha1.BuildJobSpec{
 			Toolchain: buildv1alpha1.ToolchainSpec{Image: "test:latest"},
 			Source:    buildv1alpha1.SourceSpec{Type: buildv1alpha1.SourceTypeGit, Git: &buildv1alpha1.GitSource{URL: "https://github.com/test/repo", Revision: "main"}},
@@ -65,7 +65,7 @@ func TestHandleList_Empty(t *testing.T) {
 }
 
 func TestHandleList_WithItems(t *testing.T) {
-	bj := sampleBuildJob("demo", "builds")
+	bj := sampleBuildJob("demo")
 	_, mux := newTestServer(t, bj)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/namespaces/builds/buildjobs", nil)
@@ -86,7 +86,7 @@ func TestHandleList_WithItems(t *testing.T) {
 }
 
 func TestHandleGet_Found(t *testing.T) {
-	bj := sampleBuildJob("demo", "builds")
+	bj := sampleBuildJob("demo")
 	_, mux := newTestServer(t, bj)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/namespaces/builds/buildjobs/demo", nil)
@@ -144,7 +144,7 @@ func TestHandleCreate_New(t *testing.T) {
 }
 
 func TestHandleCreate_UpdateExisting(t *testing.T) {
-	bj := sampleBuildJob("existing", "builds")
+	bj := sampleBuildJob("existing")
 	_, mux := newTestServer(t, bj)
 
 	body := CreateBuildJobRequest{
@@ -207,7 +207,7 @@ func TestHandleRun_NotFound(t *testing.T) {
 }
 
 func TestHandleRun_Success(t *testing.T) {
-	bj := sampleBuildJob("demo", "builds")
+	bj := sampleBuildJob("demo")
 	_, mux := newTestServer(t, bj)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/namespaces/builds/buildjobs/demo/run", nil)
@@ -220,7 +220,7 @@ func TestHandleRun_Success(t *testing.T) {
 }
 
 func TestHandleDelete_Success(t *testing.T) {
-	bj := sampleBuildJob("demo", "builds")
+	bj := sampleBuildJob("demo")
 	_, mux := newTestServer(t, bj)
 
 	req := httptest.NewRequest(http.MethodDelete, "/v1/namespaces/builds/buildjobs/demo", nil)
@@ -258,7 +258,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestToSummary_GitSource(t *testing.T) {
-	bj := sampleBuildJob("demo", "builds")
+	bj := sampleBuildJob("demo")
 	bj.Status.Phase = buildv1alpha1.PhaseRunning
 	bj.Status.CurrentPipelineRun = "demo-run1"
 	summary := toSummary(bj)
@@ -292,7 +292,7 @@ func TestToSummary_PVCSource(t *testing.T) {
 }
 
 func TestToSummary_StageStatuses(t *testing.T) {
-	bj := sampleBuildJob("demo", "builds")
+	bj := sampleBuildJob("demo")
 	bj.Status.Stages = []buildv1alpha1.StageStatus{
 		{Name: "build", State: "Succeeded", Message: "done"},
 		{Name: "package", State: "Running", Message: "packaging"},
@@ -330,9 +330,9 @@ func makeTestTarGz(t *testing.T, files map[string][]byte) []byte {
 	return buf.Bytes()
 }
 
-func newTestServerWithUploadRoute(t *testing.T, objs ...runtime.Object) (*Server, *http.ServeMux) {
+func newTestServerWithUploadRoute(t *testing.T) (*Server, *http.ServeMux) {
 	t.Helper()
-	s, mux := newTestServer(t, objs...)
+	s, mux := newTestServer(t)
 	mux.HandleFunc("POST /v1/namespaces/{namespace}/buildjobs/{name}/artifacts/upload", s.handleArtifactUpload)
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/artifacts", s.handleArtifactList)
 	return s, mux

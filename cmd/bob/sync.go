@@ -423,7 +423,7 @@ func tarUpload(kubecli, podName, namespace, srcDir, destPath string) error {
 	}
 
 	count, err := tarDirectory(srcDir, stdin)
-	stdin.Close()
+	_ = stdin.Close()
 	if err != nil {
 		return fmt.Errorf("creating tar archive: %w", err)
 	}
@@ -487,7 +487,7 @@ func tarDirectory(dir string, w io.Writer) (int, error) {
 			return err
 		}
 		_, copyErr := io.Copy(tw, f)
-		f.Close()
+		_ = f.Close()
 		if copyErr != nil {
 			return copyErr
 		}

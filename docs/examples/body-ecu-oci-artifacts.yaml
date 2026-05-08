@@ -37,8 +37,3 @@ spec:
       mediaType: application/vnd.auto.firmware.layer.v1
       pushSecret:
         name: quay-push-creds
-  caches:
-    - name: ccache
-      mountPath: /root/.ccache
-    - name: west-modules
-      mountPath: /root/.west-modules

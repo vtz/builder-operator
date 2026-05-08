@@ -30,6 +30,9 @@ const (
 
 	workspaceName     = "shared-workspace"
 	taskWorkspaceName = "ws"
+	taskCopySource    = "copy-source"
+	taskClone         = "clone"
+	cacheVolumeName   = "bob-cache"
 
 	DefaultFirmwareMediaType = "application/vnd.auto.firmware.layer.v1"
 )
@@ -80,9 +83,9 @@ cd source
 git checkout %s
 git rev-parse HEAD > $(results.commit-sha.path)
 `, ShellQuote(bj.Spec.Source.Git.URL), ShellQuote(rev))
-		cloneTask := buildCloneTaskSpec("clone", GitCloneImage, cloneScript, envVars)
+		cloneTask := buildCloneTaskSpec(taskClone, GitCloneImage, cloneScript, envVars)
 		tasks = append(tasks, cloneTask)
-		prevStage = "clone"
+		prevStage = taskClone
 
 	case bj.Spec.Source.Type == buildv1alpha1.SourceTypePVC && bj.Spec.Source.PVC != nil:
 		srcPath := bj.Spec.Source.PVC.Path
@@ -101,9 +104,9 @@ mkdir -p $(workspaces.ws.path)/source
 cp -a /mnt/pvc-source%s. $(workspaces.ws.path)/source/
 echo "Copied PVC source to workspace"
 `, srcPath)
-		copyTask := buildPVCCopyTaskSpec("copy-source", image, copyScript, envVars, bj.Spec.Source.PVC.ClaimName)
+		copyTask := buildPVCCopyTaskSpec(taskCopySource, image, copyScript, envVars, bj.Spec.Source.PVC.ClaimName)
 		tasks = append(tasks, copyTask)
-		prevStage = "copy-source"
+		prevStage = taskCopySource
 	}
 
 	for _, stage := range bj.Spec.Stages {
@@ -119,8 +122,10 @@ echo "Copied PVC source to workspace"
 	if bj.Spec.Artifacts.Path != "" {
 		switch bj.Spec.Artifacts.Destination {
 		case buildv1alpha1.ArtifactDestinationOCI:
-			ociTask := buildOCIArtifactTask(bj, envVars, prevStage)
-			tasks = append(tasks, ociTask)
+			if bj.Spec.Artifacts.OCI != nil {
+				ociTask := buildOCIArtifactTask(bj, envVars, prevStage)
+				tasks = append(tasks, ociTask)
+			}
 		default:
 			uploadScript := fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
@@ -339,14 +344,14 @@ func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter 
 	var volumeMounts []interface{}
 	if len(caches) > 0 {
 		volumes = append(volumes, map[string]interface{}{
-			"name": "bob-cache",
+			"name": cacheVolumeName,
 			"persistentVolumeClaim": map[string]interface{}{
-				"claimName": "bob-cache",
+				"claimName": cacheVolumeName,
 			},
 		})
 		for _, cache := range caches {
 			volumeMounts = append(volumeMounts, map[string]interface{}{
-				"name":      "bob-cache",
+				"name":      cacheVolumeName,
 				"mountPath": cache.MountPath,
 				"subPath":   cache.Name,
 			})
@@ -384,7 +389,7 @@ func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter 
 }
 
 func SharedCachePVCName() string {
-	return "bob-cache"
+	return cacheVolumeName
 }
 
 func buildCollectTask(image, script string, envVars []interface{}, runAfter string) map[string]interface{} {
@@ -473,9 +478,9 @@ fi
 
 cd "$ARTIFACTS_DIR"
 FILES=""
-for f in *; do
-  [ -f "$f" ] && FILES="$FILES $f:%s"
-done
+while IFS= read -r f; do
+  FILES="$FILES $f:%s"
+done < <(find . -type f | sed 's|^\./||')
 
 echo "Pushing OCI artifact to %s"
 ORAS_OUTPUT=$(oras push --insecure %s \

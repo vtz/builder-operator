@@ -85,7 +85,7 @@ func runLocalBuild(file, branch, sourceDir, outputDir string) error {
 	fmt.Printf("  Runtime: %s\n", filepath.Base(runtime))
 	fmt.Println()
 
-	var scriptParts []string
+	scriptParts := make([]string, 0, 2+len(bj.Spec.Stages)*3+3)
 	scriptParts = append(scriptParts, "set -euo pipefail")
 	scriptParts = append(scriptParts, "cd /workspace")
 

@@ -318,9 +318,9 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "[error reading logs: %v]\n\n", err)
 				continue
 			}
-			io.CopyN(w, stream, limitBytes)
-			stream.Close()
-			w.Write([]byte("\n"))
+			_, _ = io.CopyN(w, stream, limitBytes)
+			_ = stream.Close()
+			_, _ = w.Write([]byte("\n"))
 			if flusher != nil {
 				flusher.Flush()
 			}
@@ -350,7 +350,7 @@ func (s *Server) handleCLIDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("binary not found: %s (cli-dir=%s)", filename, s.CLIDir))
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	stat, err := f.Stat()
 	if err != nil {
@@ -405,7 +405,7 @@ func (s *Server) handleArtifactUpload(w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(ctx)
 
 	limitedBody := http.MaxBytesReader(w, r.Body, s.MaxUploadBytes)
-	defer limitedBody.Close()
+	defer func() { _ = limitedBody.Close() }()
 
 	dir := s.artifactDir(ns, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -418,7 +418,7 @@ func (s *Server) handleArtifactUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid gzip: %v", err))
 		return
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 	var count int
@@ -452,13 +452,13 @@ func (s *Server) handleArtifactUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		written, copyErr := io.Copy(f, io.LimitReader(tr, s.MaxFileBytes+1))
-		f.Close()
+		_ = f.Close()
 		if copyErr != nil {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("writing file: %v", copyErr))
 			return
 		}
 		if written > s.MaxFileBytes {
-			os.Remove(filepath.Join(dir, clean))
+			_ = os.Remove(filepath.Join(dir, clean))
 			writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("file %q exceeds max size of %d bytes", clean, s.MaxFileBytes))
 			return
 		}
@@ -513,7 +513,7 @@ func (s *Server) handleArtifactDownload(w http.ResponseWriter, r *http.Request) 
 		}
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	stat, _ := f.Stat()
 	w.Header().Set("Content-Type", "application/octet-stream")

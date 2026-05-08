@@ -206,7 +206,7 @@ func TestExtractTaskRunResult_Found(t *testing.T) {
 			},
 		},
 	}
-	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
+	digest := r.extractImageDigest(tr)
 	if digest != "sha256:abc123def456" {
 		t.Fatalf("expected sha256:abc123def456, got %q", digest)
 	}
@@ -226,7 +226,7 @@ func TestExtractTaskRunResult_NotFound(t *testing.T) {
 			},
 		},
 	}
-	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
+	digest := r.extractImageDigest(tr)
 	if digest != "" {
 		t.Fatalf("expected empty string for missing result, got %q", digest)
 	}
@@ -239,7 +239,7 @@ func TestExtractTaskRunResult_EmptyResults(t *testing.T) {
 			"status": map[string]interface{}{},
 		},
 	}
-	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
+	digest := r.extractImageDigest(tr)
 	if digest != "" {
 		t.Fatalf("expected empty string with no results, got %q", digest)
 	}
@@ -259,7 +259,7 @@ func TestExtractTaskRunResult_EmptyValue(t *testing.T) {
 			},
 		},
 	}
-	digest := r.extractTaskRunResult(tr, "IMAGE_DIGEST")
+	digest := r.extractImageDigest(tr)
 	if digest != "" {
 		t.Fatalf("expected empty string for empty value, got %q", digest)
 	}
