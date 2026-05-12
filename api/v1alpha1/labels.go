@@ -21,6 +21,6 @@ const (
 
 	AnnotationRunAt = "builder.sdv.cloud.redhat.com/run-at"
 
-	ManagedByValue          = "bob"
-	DefaultServiceAccount   = "pipeline"
+	ManagedByValue        = "bob"
+	DefaultServiceAccount = "pipeline"
 )

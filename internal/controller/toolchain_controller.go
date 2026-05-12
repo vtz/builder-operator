@@ -206,10 +206,10 @@ echo "Toolchain image pushed: %s"
 					map[string]interface{}{
 						"name":  "build-push",
 						"image": buildahImage,
-					"securityContext": map[string]interface{}{
-						"runAsNonRoot": true,
-						"runAsUser":    int64(1000),
-					},
+						"securityContext": map[string]interface{}{
+							"runAsNonRoot": true,
+							"runAsUser":    int64(1000),
+						},
 						"script": script,
 					},
 				},

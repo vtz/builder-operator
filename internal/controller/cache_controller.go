@@ -85,8 +85,8 @@ func (r *CacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				Name:      pvcName,
 				Namespace: cache.Namespace,
 				Labels: map[string]string{
-					buildv1alpha1.LabelManagedBy: buildv1alpha1.ManagedByValue,
-					"builder.sdv.cloud.redhat.com/cache": cache.Name,
+					buildv1alpha1.LabelManagedBy:              buildv1alpha1.ManagedByValue,
+					"builder.sdv.cloud.redhat.com/cache":      cache.Name,
 					"builder.sdv.cloud.redhat.com/cache-type": string(cache.Spec.Type),
 				},
 			},

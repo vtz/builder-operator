@@ -60,7 +60,7 @@ spec:
                   properties:
                     type:
                       type: string
-                      enum: [git, pvc]
+                      enum: [git, pvc, repo]
                     git:
                       type: object
                       required: [url]
@@ -84,6 +84,21 @@ spec:
                         path:
                           type: string
                           default: /
+                    repo:
+                      type: object
+                      required: [manifestUrl]
+                      properties:
+                        manifestUrl:
+                          type: string
+                          minLength: 1
+                        branch:
+                          type: string
+                        manifestName:
+                          type: string
+                        mirrorRef:
+                          type: string
+                        syncJobs:
+                          type: integer
                 target:
                   type: object
                   properties:
