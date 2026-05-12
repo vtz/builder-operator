@@ -57,6 +57,16 @@ func (in *PVCSource) DeepCopy() *PVCSource {
 	return out
 }
 
+func (in *RepoSource) DeepCopyInto(out *RepoSource) { *out = *in }
+func (in *RepoSource) DeepCopy() *RepoSource {
+	if in == nil {
+		return nil
+	}
+	out := new(RepoSource)
+	in.DeepCopyInto(out)
+	return out
+}
+
 func (in *SourceSpec) DeepCopyInto(out *SourceSpec) {
 	*out = *in
 	if in.Git != nil {
@@ -67,6 +77,11 @@ func (in *SourceSpec) DeepCopyInto(out *SourceSpec) {
 	if in.PVC != nil {
 		in, out := &in.PVC, &out.PVC
 		*out = new(PVCSource)
+		**out = **in
+	}
+	if in.Repo != nil {
+		in, out := &in.Repo, &out.Repo
+		*out = new(RepoSource)
 		**out = **in
 	}
 }

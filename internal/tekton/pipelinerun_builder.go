@@ -26,12 +26,16 @@ const (
 	TektonAPIVersion = "tekton.dev/v1"
 	PipelineRunKind  = "PipelineRun"
 	GitCloneImage    = "alpine/git:latest"
+	RepoInitImage    = "python:3.12-slim"
 	OrasImage        = "ghcr.io/oras-project/oras:v1.2.0"
 
 	workspaceName     = "shared-workspace"
 	taskWorkspaceName = "ws"
 	taskCopySource    = "copy-source"
 	taskClone         = "clone"
+	taskRepoSync      = "repo-sync"
+	mirrorVolumeName  = "repo-mirror"
+	mirrorMountPath   = "/mnt/mirror"
 	cacheVolumeName   = "bob-cache"
 
 	DefaultFirmwareMediaType = "application/vnd.auto.firmware.layer.v1"
@@ -107,6 +111,11 @@ echo "Copied PVC source to workspace"
 		copyTask := buildPVCCopyTaskSpec(taskCopySource, image, copyScript, envVars, bj.Spec.Source.PVC.ClaimName)
 		tasks = append(tasks, copyTask)
 		prevStage = taskCopySource
+
+	case bj.Spec.Source.Type == buildv1alpha1.SourceTypeRepo && bj.Spec.Source.Repo != nil:
+		repoTask := buildRepoTaskSpec(bj.Spec.Source.Repo, envVars)
+		tasks = append(tasks, repoTask)
+		prevStage = taskRepoSync
 	}
 
 	for _, stage := range bj.Spec.Stages {
@@ -328,6 +337,87 @@ func buildPVCCopyTaskSpec(name, image, script string, envVars []interface{}, cla
 	}
 }
 
+func buildRepoTaskSpec(src *buildv1alpha1.RepoSource, envVars []interface{}) map[string]interface{} {
+	syncJobs := src.SyncJobs
+	if syncJobs <= 0 {
+		syncJobs = 4
+	}
+
+	initArgs := fmt.Sprintf("-u %s", ShellQuote(src.ManifestURL))
+	if src.Branch != "" {
+		initArgs += fmt.Sprintf(" -b %s", ShellQuote(src.Branch))
+	}
+	if src.ManifestName != "" {
+		initArgs += fmt.Sprintf(" -m %s", ShellQuote(src.ManifestName))
+	}
+	if src.MirrorRef != "" {
+		initArgs += fmt.Sprintf(" --reference=%s", ShellQuote(mirrorMountPath))
+	}
+
+	script := fmt.Sprintf(`#!/bin/sh
+set -eu
+# Install repo if not present (repo is a Python script, no compiled binary needed)
+if ! command -v repo > /dev/null 2>&1; then
+  pip install --quiet repo
+fi
+cd $(workspaces.ws.path)
+mkdir -p source
+cd source
+repo init %s
+repo sync -j%d
+`, initArgs, syncJobs)
+
+	allowPrivEsc := false
+
+	var volumes []interface{}
+	var volumeMounts []interface{}
+	if src.MirrorRef != "" {
+		volumes = append(volumes, map[string]interface{}{
+			"name": mirrorVolumeName,
+			"persistentVolumeClaim": map[string]interface{}{
+				"claimName": src.MirrorRef,
+				"readOnly":  true,
+			},
+		})
+		volumeMounts = append(volumeMounts, map[string]interface{}{
+			"name":      mirrorVolumeName,
+			"mountPath": mirrorMountPath,
+			"readOnly":  true,
+		})
+	}
+
+	step := map[string]interface{}{
+		"name":  "run",
+		"image": RepoInitImage,
+		"env":   envVars,
+		"securityContext": map[string]interface{}{
+			"allowPrivilegeEscalation": allowPrivEsc,
+		},
+		"script": script,
+	}
+	if len(volumeMounts) > 0 {
+		step["volumeMounts"] = volumeMounts
+	}
+
+	taskSpec := map[string]interface{}{
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": taskWorkspaceName, "mountPath": "/workspace"},
+		},
+		"steps": []interface{}{step},
+	}
+	if len(volumes) > 0 {
+		taskSpec["volumes"] = volumes
+	}
+
+	return map[string]interface{}{
+		"name":     taskRepoSync,
+		"taskSpec": taskSpec,
+		"workspaces": []interface{}{
+			map[string]interface{}{"name": taskWorkspaceName, "workspace": workspaceName},
+		},
+	}
+}
+
 func buildTaskSpec(name, image, command string, envVars []interface{}, runAfter string, caches []buildv1alpha1.CacheMount) map[string]interface{} {
 	allowPrivEsc := false
 	step := map[string]interface{}{
@@ -442,11 +532,11 @@ func buildOCIArtifactTask(bj *buildv1alpha1.BuildJob, envVars []interface{}, run
 	ref := fmt.Sprintf("%s:%s", oci.Repository, tag)
 
 	annotations := map[string]string{
-		"org.opencontainers.image.title":   bj.Name,
-		"vnd.auto.target.board":            bj.Spec.Target.Board,
-		"vnd.auto.target.platform":         bj.Spec.Target.Platform,
-		"vnd.auto.target.architecture":     bj.Spec.Target.Architecture,
-		"vnd.auto.build.generation":        fmt.Sprintf("%d", bj.Generation),
+		"org.opencontainers.image.title": bj.Name,
+		"vnd.auto.target.board":          bj.Spec.Target.Board,
+		"vnd.auto.target.platform":       bj.Spec.Target.Platform,
+		"vnd.auto.target.architecture":   bj.Spec.Target.Architecture,
+		"vnd.auto.build.generation":      fmt.Sprintf("%d", bj.Generation),
 	}
 	if bj.Spec.Target.Variant != "" {
 		annotations["vnd.auto.target.variant"] = bj.Spec.Target.Variant
@@ -587,6 +677,10 @@ func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {
 	}
 	if bj.Spec.Target.Variant != "" {
 		vars = append(vars, map[string]interface{}{"name": "BOB_VARIANT", "value": bj.Spec.Target.Variant})
+	}
+	if bj.Spec.Source.Type == buildv1alpha1.SourceTypeRepo && bj.Spec.Source.Repo != nil {
+		vars = append(vars, map[string]interface{}{"name": "BOB_MANIFEST_URL", "value": bj.Spec.Source.Repo.ManifestURL})
+		vars = append(vars, map[string]interface{}{"name": "BOB_MANIFEST_BRANCH", "value": bj.Spec.Source.Repo.Branch})
 	}
 	return vars
 }

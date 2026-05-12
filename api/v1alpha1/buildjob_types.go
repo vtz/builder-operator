@@ -23,8 +23,9 @@ type ArtifactDestinationType string
 type BuildJobPhase string
 
 const (
-	SourceTypeGit SourceType = "git"
-	SourceTypePVC SourceType = "pvc"
+	SourceTypeGit  SourceType = "git"
+	SourceTypePVC  SourceType = "pvc"
+	SourceTypeRepo SourceType = "repo"
 
 	ArtifactDestinationPVC ArtifactDestinationType = "pvc"
 	ArtifactDestinationOCI ArtifactDestinationType = "oci"
@@ -66,13 +67,32 @@ type PVCSource struct {
 	Path string `json:"path,omitempty"`
 }
 
+// RepoSource configures a Google repo-tool manifest sync for AOSP/AAOS builds.
+type RepoSource struct {
+	// +kubebuilder:validation:MinLength=1
+	ManifestURL string `json:"manifestUrl"`
+	// +optional
+	Branch string `json:"branch,omitempty"`
+	// +optional
+	ManifestName string `json:"manifestName,omitempty"`
+	// MirrorRef is the name of a PVC containing a local repo mirror; when set,
+	// repo init receives --reference=<mirror-path> to avoid re-downloading blobs.
+	// +optional
+	MirrorRef string `json:"mirrorRef,omitempty"`
+	// SyncJobs controls the -j parallelism passed to repo sync.
+	// +optional
+	SyncJobs int `json:"syncJobs,omitempty"`
+}
+
 type SourceSpec struct {
-	// +kubebuilder:validation:Enum=git;pvc
+	// +kubebuilder:validation:Enum=git;pvc;repo
 	Type SourceType `json:"type"`
 	// +optional
 	Git *GitSource `json:"git,omitempty"`
 	// +optional
 	PVC *PVCSource `json:"pvc,omitempty"`
+	// +optional
+	Repo *RepoSource `json:"repo,omitempty"`
 }
 
 type TargetSpec struct {

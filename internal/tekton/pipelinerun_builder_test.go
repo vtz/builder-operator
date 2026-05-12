@@ -867,6 +867,342 @@ func TestBuildPipelineRun_PVCArtifactStillWorks(t *testing.T) {
 	}
 }
 
+func TestBuildPipelineRun_RepoSourceTask(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-build", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypeRepo,
+				Repo: &buildv1alpha1.RepoSource{
+					ManifestURL: "https://android.googlesource.com/platform/manifest",
+					Branch:      "android-14.0.0_r50",
+					SyncJobs:    16,
+				},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "m -j$(nproc)"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks (repo-sync + build), got %d", len(tasks))
+	}
+
+	first := tasks[0].(map[string]interface{})
+	if first["name"] != taskRepoSync {
+		t.Fatalf("expected first task to be %s, got %s", taskRepoSync, first["name"])
+	}
+
+	taskSpec := first["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+
+	if step["image"] != RepoInitImage {
+		t.Fatalf("expected repo task to use RepoInitImage (%s), got %v", RepoInitImage, step["image"])
+	}
+
+	script := step["script"].(string)
+	if !strings.Contains(script, "repo init") {
+		t.Fatalf("expected script to contain 'repo init', got:\n%s", script)
+	}
+	if !strings.Contains(script, "repo sync") {
+		t.Fatalf("expected script to contain 'repo sync', got:\n%s", script)
+	}
+	if !strings.Contains(script, "-j16") {
+		t.Fatalf("expected script to pass -j16 to repo sync, got:\n%s", script)
+	}
+	if !strings.Contains(script, "android.googlesource.com") {
+		t.Fatalf("expected manifest URL in script, got:\n%s", script)
+	}
+	if !strings.Contains(script, "android-14.0.0_r50") {
+		t.Fatalf("expected branch in script, got:\n%s", script)
+	}
+}
+
+func TestBuildPipelineRun_RepoSourceDefaultSyncJobs(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-default-jobs", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypeRepo,
+				Repo: &buildv1alpha1.RepoSource{
+					ManifestURL: "https://example.com/manifest",
+				},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+	first := tasks[0].(map[string]interface{})
+	taskSpec := first["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	script := step["script"].(string)
+
+	if !strings.Contains(script, "-j4") {
+		t.Fatalf("expected default syncJobs of 4, script:\n%s", script)
+	}
+}
+
+func TestBuildPipelineRun_RepoSourceMirrorMount(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-mirror", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypeRepo,
+				Repo: &buildv1alpha1.RepoSource{
+					ManifestURL: "https://android.googlesource.com/platform/manifest",
+					MirrorRef:   "aosp-mirror",
+				},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	syncTask := tasks[0].(map[string]interface{})
+	taskSpec := syncTask["taskSpec"].(map[string]interface{})
+
+	volumes, ok := taskSpec["volumes"].([]interface{})
+	if !ok || len(volumes) == 0 {
+		t.Fatal("expected volumes for mirror PVC when mirrorRef is set")
+	}
+	vol := volumes[0].(map[string]interface{})
+	if vol["name"] != mirrorVolumeName {
+		t.Fatalf("expected volume name %s, got %v", mirrorVolumeName, vol["name"])
+	}
+	pvcSpec := vol["persistentVolumeClaim"].(map[string]interface{})
+	if pvcSpec["claimName"] != "aosp-mirror" {
+		t.Fatalf("expected claimName aosp-mirror, got %v", pvcSpec["claimName"])
+	}
+	if pvcSpec["readOnly"] != true {
+		t.Fatal("expected mirror PVC to be mounted read-only")
+	}
+
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	mounts := step["volumeMounts"].([]interface{})
+	if len(mounts) == 0 {
+		t.Fatal("expected volumeMounts for mirror PVC")
+	}
+	mount := mounts[0].(map[string]interface{})
+	if mount["mountPath"] != mirrorMountPath {
+		t.Fatalf("expected mountPath %s, got %v", mirrorMountPath, mount["mountPath"])
+	}
+	if mount["readOnly"] != true {
+		t.Fatal("expected mirror volume mount to be read-only")
+	}
+
+	script := step["script"].(string)
+	if !strings.Contains(script, "--reference=") {
+		t.Fatalf("expected --reference flag in repo init when mirrorRef is set, got:\n%s", script)
+	}
+	if !strings.Contains(script, mirrorMountPath) {
+		t.Fatalf("expected mirror mount path %s in script, got:\n%s", mirrorMountPath, script)
+	}
+}
+
+func TestBuildPipelineRun_RepoSourceNoMirrorMount(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-no-mirror", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypeRepo,
+				Repo: &buildv1alpha1.RepoSource{
+					ManifestURL: "https://android.googlesource.com/platform/manifest",
+				},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	syncTask := tasks[0].(map[string]interface{})
+	taskSpec := syncTask["taskSpec"].(map[string]interface{})
+
+	if _, has := taskSpec["volumes"]; has {
+		t.Fatal("expected no volumes when mirrorRef is not set")
+	}
+
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	if _, has := step["volumeMounts"]; has {
+		t.Fatal("expected no volumeMounts when mirrorRef is not set")
+	}
+}
+
+func TestBuildPipelineRun_RepoSourceEnvVars(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-env", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypeRepo,
+				Repo: &buildv1alpha1.RepoSource{
+					ManifestURL: "https://android.googlesource.com/platform/manifest",
+					Branch:      "android-14.0.0_r50",
+				},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	// Check env vars on the build stage (all stages get them)
+	buildTask := tasks[1].(map[string]interface{})
+	taskSpec := buildTask["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	envs := step["env"].([]interface{})
+
+	envMap := make(map[string]string)
+	for _, e := range envs {
+		m := e.(map[string]interface{})
+		envMap[m["name"].(string)] = m["value"].(string)
+	}
+
+	if envMap["BOB_MANIFEST_URL"] != "https://android.googlesource.com/platform/manifest" {
+		t.Fatalf("expected BOB_MANIFEST_URL to be set, got %q", envMap["BOB_MANIFEST_URL"])
+	}
+	if envMap["BOB_MANIFEST_BRANCH"] != "android-14.0.0_r50" {
+		t.Fatalf("expected BOB_MANIFEST_BRANCH=android-14.0.0_r50, got %q", envMap["BOB_MANIFEST_BRANCH"])
+	}
+	if envMap["BOB_SOURCE_TYPE"] != "repo" {
+		t.Fatalf("expected BOB_SOURCE_TYPE=repo, got %q", envMap["BOB_SOURCE_TYPE"])
+	}
+}
+
+func TestBuildPipelineRun_RepoSourceRunAfterChaining(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-chain", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypeRepo,
+				Repo: &buildv1alpha1.RepoSource{
+					ManifestURL: "https://android.googlesource.com/platform/manifest",
+				},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "m -j$(nproc)"}},
+				{Name: "package", StageSpec: buildv1alpha1.StageSpec{Command: "cp out/*.img /workspace/"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	if len(tasks) != 3 {
+		t.Fatalf("expected 3 tasks (repo-sync + build + package), got %d", len(tasks))
+	}
+
+	syncTask := tasks[0].(map[string]interface{})
+	if _, has := syncTask["runAfter"]; has {
+		t.Fatal("repo-sync should not have runAfter")
+	}
+
+	buildTask := tasks[1].(map[string]interface{})
+	runAfter := buildTask["runAfter"].([]interface{})
+	if runAfter[0] != taskRepoSync {
+		t.Fatalf("build should runAfter %s, got %v", taskRepoSync, runAfter)
+	}
+
+	packageTask := tasks[2].(map[string]interface{})
+	packageRunAfter := packageTask["runAfter"].([]interface{})
+	if packageRunAfter[0] != "build" {
+		t.Fatalf("package should runAfter build, got %v", packageRunAfter)
+	}
+}
+
+func TestBuildPipelineRun_RepoSourceManifestName(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-manifest-name", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypeRepo,
+				Repo: &buildv1alpha1.RepoSource{
+					ManifestURL:  "https://android.googlesource.com/platform/manifest",
+					ManifestName: "default.xml",
+				},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+	syncTask := tasks[0].(map[string]interface{})
+	taskSpec := syncTask["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	script := step["script"].(string)
+
+	if !strings.Contains(script, "-m") {
+		t.Fatalf("expected -m flag for manifestName in repo init, got:\n%s", script)
+	}
+	if !strings.Contains(script, "default.xml") {
+		t.Fatalf("expected manifest name 'default.xml' in script, got:\n%s", script)
+	}
+}
+
+func TestBuildPipelineRun_RepoSourceNoPipelineResult(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-no-result", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{
+				Type: buildv1alpha1.SourceTypeRepo,
+				Repo: &buildv1alpha1.RepoSource{
+					ManifestURL: "https://android.googlesource.com/platform/manifest",
+				},
+			},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	spec := pr.Object["spec"].(map[string]interface{})
+	ps := spec["pipelineSpec"].(map[string]interface{})
+	if _, has := ps["results"]; has {
+		t.Fatal("repo source should not emit a commit-sha pipeline result")
+	}
+}
+
+func TestBuildPipelineRun_RepoSourceRepoNilSkipsTask(t *testing.T) {
+	bj := &buildv1alpha1.BuildJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "aaos-nil-repo", Namespace: "builds"},
+		Spec: buildv1alpha1.BuildJobSpec{
+			Source: buildv1alpha1.SourceSpec{Type: buildv1alpha1.SourceTypeRepo},
+			Stages: []buildv1alpha1.NamedStage{
+				{Name: "build", StageSpec: buildv1alpha1.StageSpec{Command: "make"}},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task (no repo-sync when Repo spec is nil), got %d", len(tasks))
+	}
+	first := tasks[0].(map[string]interface{})
+	if first["name"] != "build" {
+		t.Fatalf("expected first task to be build, got %s", first["name"])
+	}
+}
+
 func getPipelineTasks(t *testing.T, pr *unstructured.Unstructured) []interface{} {
 	t.Helper()
 	spec := pr.Object["spec"].(map[string]interface{})

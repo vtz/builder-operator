@@ -354,4 +354,3 @@ func TestComputeOCIRef_NilOCI(t *testing.T) {
 		t.Fatalf("expected empty ref for nil OCI, got %q", ref)
 	}
 }
-

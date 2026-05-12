@@ -523,18 +523,18 @@ func (s *Server) handleArtifactDownload(w http.ResponseWriter, r *http.Request) 
 
 func toSummary(bj *buildv1alpha1.BuildJob) BuildJobSummary {
 	summary := BuildJobSummary{
-		Name:           bj.Name,
-		Namespace:      bj.Namespace,
-		Phase:          string(bj.Status.Phase),
-		Board:          bj.Spec.Target.Board,
-		Platform:       bj.Spec.Target.Platform,
-		Architecture:   bj.Spec.Target.Architecture,
-		Image:          bj.Spec.Toolchain.Image,
-		CommitSHA:      bj.Status.CommitSHA,
+		Name:              bj.Name,
+		Namespace:         bj.Namespace,
+		Phase:             string(bj.Status.Phase),
+		Board:             bj.Spec.Target.Board,
+		Platform:          bj.Spec.Target.Platform,
+		Architecture:      bj.Spec.Target.Architecture,
+		Image:             bj.Spec.Toolchain.Image,
+		CommitSHA:         bj.Status.CommitSHA,
 		ArtifactURI:       bj.Status.ArtifactURI,
 		OCIArtifactRef:    bj.Status.OCIArtifactRef,
 		OCIArtifactDigest: bj.Status.OCIArtifactDigest,
-		PipelineRun:    bj.Status.CurrentPipelineRun,
+		PipelineRun:       bj.Status.CurrentPipelineRun,
 	}
 
 	if bj.Spec.Source.Type == buildv1alpha1.SourceTypeGit && bj.Spec.Source.Git != nil {

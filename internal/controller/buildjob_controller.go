@@ -49,11 +49,11 @@ type BuildJobReconciler struct {
 }
 
 const (
-	runAtAnnotation         = buildv1alpha1.AnnotationRunAt
-	conditionTypeSucceeded  = "Succeeded"
-	conditionStatusTrue     = "True"
-	conditionStatusFalse    = "False"
-	conditionReasonRunning  = "Running"
+	runAtAnnotation        = buildv1alpha1.AnnotationRunAt
+	conditionTypeSucceeded = "Succeeded"
+	conditionStatusTrue    = "True"
+	conditionStatusFalse   = "False"
+	conditionReasonRunning = "Running"
 )
 
 func (r *BuildJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
