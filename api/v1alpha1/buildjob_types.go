@@ -15,6 +15,7 @@
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -143,6 +144,12 @@ type BuildJobSpec struct {
 	Caches []CacheMount `json:"caches,omitempty"`
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// WorkspaceSize is the storage size of the PVC created for the build workspace.
+	// Defaults to 10Gi when not specified. Use larger values for AAOS/AOSP builds.
+	// +optional
+	// +kubebuilder:default="10Gi"
+	WorkspaceSize *resource.Quantity `json:"workspaceSize,omitempty"`
 }
 
 type NamedStage struct {

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	buildv1alpha1 "github.com/centos-automotive-suite/bob/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -865,6 +866,48 @@ func TestBuildPipelineRun_PVCArtifactStillWorks(t *testing.T) {
 	if last["name"] != "collect-artifacts" {
 		t.Fatalf("expected PVC destination to use collect-artifacts task, got %s", last["name"])
 	}
+}
+
+// TestBuildPipelineRun_WorkspaceSize_Custom verifies that spec.workspaceSize is
+// propagated to the PVC volumeClaimTemplate (regression test for issue #29).
+func TestBuildPipelineRun_WorkspaceSize_Custom(t *testing.T) {
+	bj := newTestBuildJob()
+	q := resource.MustParse("500Gi")
+	bj.Spec.WorkspaceSize = &q
+	pr := BuildPipelineRun(bj)
+
+	storage := getWorkspaceStorage(t, pr)
+	if storage != "500Gi" {
+		t.Fatalf("expected workspace storage 500Gi, got %q", storage)
+	}
+}
+
+// TestBuildPipelineRun_WorkspaceSize_DefaultWhenNil verifies the 10Gi default
+// is used when spec.workspaceSize is nil (regression test for issue #29).
+func TestBuildPipelineRun_WorkspaceSize_DefaultWhenNil(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.WorkspaceSize = nil
+	pr := BuildPipelineRun(bj)
+
+	storage := getWorkspaceStorage(t, pr)
+	if storage != "10Gi" {
+		t.Fatalf("expected default workspace storage 10Gi, got %q", storage)
+	}
+}
+
+func getWorkspaceStorage(t *testing.T, pr *unstructured.Unstructured) string {
+	t.Helper()
+	spec := pr.Object["spec"].(map[string]interface{})
+	workspaces := spec["workspaces"].([]interface{})
+	for _, ws := range workspaces {
+		wsMap := ws.(map[string]interface{})
+		storage, _, _ := unstructured.NestedString(wsMap, "volumeClaimTemplate", "spec", "resources", "requests", "storage")
+		if storage != "" {
+			return storage
+		}
+	}
+	t.Fatal("storage not found in any workspace volumeClaimTemplate")
+	return ""
 }
 
 func getPipelineTasks(t *testing.T, pr *unstructured.Unstructured) []interface{} {
