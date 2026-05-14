@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"text/tabwriter"
 
@@ -33,10 +34,13 @@ func newArtifactsCmd() *cobra.Command {
 			}
 
 			if build.OCIArtifactRef != "" {
+				if downloadDir != "" {
+					return downloadOCIArtifact(build.OCIArtifactRef, build.OCIArtifactDigest, downloadDir)
+				}
 				fmt.Printf("Artifacts pushed as OCI artifact:\n\n")
-				fmt.Printf("  Reference:  %s\n", build.OCIArtifactRef)
+				fmt.Printf("  %s\n", build.OCIArtifactRef)
 				if build.OCIArtifactDigest != "" {
-					fmt.Printf("  Digest:     %s\n", build.OCIArtifactDigest)
+					fmt.Printf("  %s\n", build.OCIArtifactDigest)
 				}
 				fmt.Println()
 				fmt.Printf("Pull with:\n")
@@ -105,6 +109,39 @@ func downloadAllArtifacts(ctx context.Context, c *bobclient.Client, name string,
 		}
 	}
 	fmt.Printf("Downloaded %d artifacts to %s/\n", len(files), dir)
+	return nil
+}
+
+func downloadOCIArtifact(ref, digest, dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	orasPath, err := exec.LookPath("oras")
+	if err != nil {
+		return fmt.Errorf("oras CLI not found in PATH — install from https://oras.land/docs/installation")
+	}
+
+	pullRef := ref
+	if digest != "" {
+		pullRef = ref + "@" + digest
+	}
+
+	fmt.Printf("Pulling OCI artifact: %s\n", pullRef)
+	fmt.Printf("  -> %s/\n", dir)
+
+	cmd := exec.Command(orasPath, "pull", pullRef, "--output", dir, "--insecure")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("oras pull failed: %w", err)
+	}
+
+	entries, _ := os.ReadDir(dir)
+	fmt.Printf("\nDownloaded %d artifact(s) to %s/\n", len(entries), dir)
+	for _, e := range entries {
+		fmt.Printf("  %s\n", e.Name())
+	}
 	return nil
 }
 
