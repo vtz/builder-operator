@@ -150,6 +150,12 @@ spec:
                       mountPath: { type: string }
                 timeout:
                   type: string
+                workspaceSize:
+                  type: string
+                  default: "10Gi"
+                  description: >-
+                    Storage size of the PVC created for the build workspace.
+                    Defaults to 10Gi. Use larger values for AAOS/AOSP builds (e.g. 500Gi).
             status:
               type: object
               properties:

@@ -149,6 +149,10 @@ func (in *BuildJobSpec) DeepCopyInto(out *BuildJobSpec) {
 		*out = new(v1.Duration)
 		**out = **in
 	}
+	if in.WorkspaceSize != nil {
+		x := in.WorkspaceSize.DeepCopy()
+		out.WorkspaceSize = &x
+	}
 }
 func (in *BuildJobSpec) DeepCopy() *BuildJobSpec {
 	if in == nil {

@@ -177,6 +177,10 @@ if r.status >= 400:
 	pipelineWorkspaces := []interface{}{
 		map[string]interface{}{"name": workspaceName},
 	}
+	workspaceSize := "10Gi"
+	if bj.Spec.WorkspaceSize != nil {
+		workspaceSize = bj.Spec.WorkspaceSize.String()
+	}
 	runWorkspaces := []interface{}{
 		map[string]interface{}{
 			"name": workspaceName,
@@ -185,7 +189,7 @@ if r.status >= 400:
 					"accessModes": []interface{}{"ReadWriteOnce"},
 					"resources": map[string]interface{}{
 						"requests": map[string]interface{}{
-							"storage": "10Gi",
+							"storage": workspaceSize,
 						},
 					},
 				},
@@ -442,11 +446,11 @@ func buildOCIArtifactTask(bj *buildv1alpha1.BuildJob, envVars []interface{}, run
 	ref := fmt.Sprintf("%s:%s", oci.Repository, tag)
 
 	annotations := map[string]string{
-		"org.opencontainers.image.title":   bj.Name,
-		"vnd.auto.target.board":            bj.Spec.Target.Board,
-		"vnd.auto.target.platform":         bj.Spec.Target.Platform,
-		"vnd.auto.target.architecture":     bj.Spec.Target.Architecture,
-		"vnd.auto.build.generation":        fmt.Sprintf("%d", bj.Generation),
+		"org.opencontainers.image.title": bj.Name,
+		"vnd.auto.target.board":          bj.Spec.Target.Board,
+		"vnd.auto.target.platform":       bj.Spec.Target.Platform,
+		"vnd.auto.target.architecture":   bj.Spec.Target.Architecture,
+		"vnd.auto.build.generation":      fmt.Sprintf("%d", bj.Generation),
 	}
 	if bj.Spec.Target.Variant != "" {
 		annotations["vnd.auto.target.variant"] = bj.Spec.Target.Variant
