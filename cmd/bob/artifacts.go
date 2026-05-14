@@ -130,11 +130,18 @@ func downloadOCIArtifact(ref, digest, dir string) error {
 	fmt.Printf("Pulling OCI artifact: %s\n", pullRef)
 	fmt.Printf("  -> %s/\n", dir)
 
-	cmd := exec.Command(orasPath, "pull", pullRef, "--output", dir, "--insecure")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	pullCmd := exec.Command(orasPath, "pull", pullRef, "--output", dir, "--insecure")
+	pullCmd.Stdout = os.Stdout
+	pullCmd.Stderr = os.Stderr
+	if err := pullCmd.Run(); err != nil {
 		return fmt.Errorf("oras pull failed: %w", err)
+	}
+
+	manifestCmd := exec.Command(orasPath, "manifest", "fetch", ref, "--insecure")
+	manifestOut, err := manifestCmd.Output()
+	if err == nil && len(manifestOut) > 0 {
+		manifestPath := filepath.Join(dir, "manifest.json")
+		_ = os.WriteFile(manifestPath, manifestOut, 0o644)
 	}
 
 	entries, _ := os.ReadDir(dir)
