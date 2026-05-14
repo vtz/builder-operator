@@ -32,7 +32,7 @@ spec:
     destination: oci
     path: /workspace/artifacts
     oci:
-      repository: quay.io/myorg/body-ecu-firmware
+      repository: quay.io/vzein/builder
       tag: "${name}-${arch}-${variant}"
       mediaType: application/vnd.auto.firmware.layer.v1
       pushSecret:
