@@ -1,0 +1,54 @@
+apiVersion: builder.sdv.cloud.redhat.com/v1alpha1
+kind: BuildJob
+metadata:
+  name: body-ecu-signed
+  namespace: bob-builds
+spec:
+  toolchain:
+    image: ghcr.io/zephyrproject-rtos/ci-base:v0.27.4
+    serviceAccountName: build-sa
+  source:
+    type: git
+    git:
+      url: https://github.com/vtz/body-ecu
+      revision: main
+  target:
+    board: nucleo_h755zi_q
+    platform: zephyr
+    architecture: arm
+    variant: v7m
+  stages:
+    - name: fetch
+      command: "west init -l . && west update"
+    - name: build
+      command: "west build -b $BOB_BOARD src/app"
+    - name: package
+      command: |
+        mkdir -p /workspace/artifacts
+        cp build/zephyr/zephyr.bin /workspace/artifacts/
+        cp build/zephyr/zephyr.elf /workspace/artifacts/
+  artifacts:
+    destination: oci
+    path: /workspace/artifacts
+    oci:
+      repository: quay.io/vzein/builder
+      tag: "${name}-${arch}-${variant}"
+      mediaType: application/vnd.auto.firmware.layer.v1
+      pushSecret:
+        name: quay-push-creds
+      signing:
+        cosignSecret:
+          name: cosign-signing-key
+---
+# Setup: Generate cosign key pair and store as Kubernetes Secret
+#
+#   cosign generate-key-pair
+#   kubectl create secret generic cosign-signing-key \
+#     --from-file=cosign.key=cosign.key \
+#     -n bob-builds
+#
+# Verify after build:
+#
+#   bob verify body-ecu-signed --key cosign.pub
+#   # or
+#   cosign verify --key cosign.pub quay.io/vzein/builder:body-ecu-signed-arm-v7m

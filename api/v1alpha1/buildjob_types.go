@@ -119,6 +119,17 @@ type OCIArtifactConfig struct {
 	// Custom media type for artifact layers. Defaults to application/vnd.auto.firmware.layer.v1.
 	// +optional
 	MediaType string `json:"mediaType,omitempty"`
+	// Signing configuration for the pushed artifact.
+	// +optional
+	Signing *SigningConfig `json:"signing,omitempty"`
+}
+
+type SigningConfig struct {
+	// Secret containing the cosign private key (key: cosign.key).
+	CosignSecret SecretReference `json:"cosignSecret"`
+	// Password for the cosign key (key: cosign.password). Optional if key is unencrypted.
+	// +optional
+	CosignPasswordSecret *SecretReference `json:"cosignPasswordSecret,omitempty"`
 }
 
 type CacheMount struct {
@@ -172,6 +183,8 @@ type BuildJobStatus struct {
 	OCIArtifactRef string `json:"ociArtifactRef,omitempty"`
 	// +optional
 	OCIArtifactDigest string `json:"ociArtifactDigest,omitempty"`
+	// +optional
+	OCISigned bool `json:"ociSigned,omitempty"`
 	// +optional
 	FailureReason string `json:"failureReason,omitempty"`
 	// +optional

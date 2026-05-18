@@ -109,7 +109,53 @@ func (in *NamedStage) DeepCopy() *NamedStage {
 	return out
 }
 
-func (in *ArtifactSpec) DeepCopyInto(out *ArtifactSpec) { *out = *in }
+func (in *OCIArtifactConfig) DeepCopyInto(out *OCIArtifactConfig) {
+	*out = *in
+	if in.PushSecret != nil {
+		in, out := &in.PushSecret, &out.PushSecret
+		*out = new(SecretReference)
+		**out = **in
+	}
+	if in.Signing != nil {
+		in, out := &in.Signing, &out.Signing
+		*out = new(SigningConfig)
+		(*in).DeepCopyInto(*out)
+	}
+}
+func (in *OCIArtifactConfig) DeepCopy() *OCIArtifactConfig {
+	if in == nil {
+		return nil
+	}
+	out := new(OCIArtifactConfig)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *SigningConfig) DeepCopyInto(out *SigningConfig) {
+	*out = *in
+	if in.CosignPasswordSecret != nil {
+		in, out := &in.CosignPasswordSecret, &out.CosignPasswordSecret
+		*out = new(SecretReference)
+		**out = **in
+	}
+}
+func (in *SigningConfig) DeepCopy() *SigningConfig {
+	if in == nil {
+		return nil
+	}
+	out := new(SigningConfig)
+	in.DeepCopyInto(out)
+	return out
+}
+
+func (in *ArtifactSpec) DeepCopyInto(out *ArtifactSpec) {
+	*out = *in
+	if in.OCI != nil {
+		in, out := &in.OCI, &out.OCI
+		*out = new(OCIArtifactConfig)
+		(*in).DeepCopyInto(*out)
+	}
+}
 func (in *ArtifactSpec) DeepCopy() *ArtifactSpec {
 	if in == nil {
 		return nil
@@ -138,7 +184,7 @@ func (in *BuildJobSpec) DeepCopyInto(out *BuildJobSpec) {
 		*out = make([]NamedStage, len(*in))
 		copy(*out, *in)
 	}
-	out.Artifacts = in.Artifacts
+	in.Artifacts.DeepCopyInto(&out.Artifacts)
 	if in.Caches != nil {
 		in, out := &in.Caches, &out.Caches
 		*out = make([]CacheMount, len(*in))

@@ -532,8 +532,9 @@ func toSummary(bj *buildv1alpha1.BuildJob) BuildJobSummary {
 		Image:          bj.Spec.Toolchain.Image,
 		CommitSHA:      bj.Status.CommitSHA,
 		ArtifactURI:       bj.Status.ArtifactURI,
-		OCIArtifactRef:    bj.Status.OCIArtifactRef,
-		OCIArtifactDigest: bj.Status.OCIArtifactDigest,
+		OCIArtifactRef:       bj.Status.OCIArtifactRef,
+		OCIArtifactDigest:    bj.Status.OCIArtifactDigest,
+		OCISigned:            bj.Status.OCISigned,
 		PipelineRun:    bj.Status.CurrentPipelineRun,
 	}
 
