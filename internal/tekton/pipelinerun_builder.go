@@ -615,18 +615,17 @@ set -eu
 export HOME=/tmp/cosign-home
 mkdir -p "$HOME"
 
-REF=$(cat $(workspaces.ws.path)/oci-ref-result 2>/dev/null || cat $(results.oci-ref.path) 2>/dev/null || true)
-DIGEST=$(cat $(workspaces.ws.path)/oci-digest-result 2>/dev/null || true)
+REF="$(params.oci-ref)"
+DIGEST="$(params.oci-digest)"
 
 if [ -z "$REF" ]; then
-  REF="$(tasks.oci-push.results.oci-ref)"
-fi
-if [ -z "$DIGEST" ]; then
-  DIGEST="$(tasks.oci-push.results.oci-digest)"
+  echo "No OCI artifact was pushed; skipping signing"
+  echo "" > $(results.signature.path)
+  exit 0
 fi
 
 SIGN_TARGET="$REF@$DIGEST"
-if [ -z "$DIGEST" ] || [ "$DIGEST" = "" ]; then
+if [ -z "$DIGEST" ]; then
   SIGN_TARGET="$REF"
 fi
 
@@ -684,6 +683,12 @@ echo "$SIGN_TARGET" > $(results.signature.path)
 			"name": "push-secret",
 			"secret": map[string]interface{}{
 				"secretName": bj.Spec.Artifacts.OCI.PushSecret.Name,
+				"items": []interface{}{
+					map[string]interface{}{
+						"key":  ".dockerconfigjson",
+						"path": "config.json",
+					},
+				},
 			},
 		})
 		volumeMounts = append(volumeMounts, map[string]interface{}{
@@ -709,6 +714,10 @@ echo "$SIGN_TARGET" > $(results.signature.path)
 	}
 
 	taskSpec := map[string]interface{}{
+		"params": []interface{}{
+			map[string]interface{}{"name": "oci-ref", "type": "string"},
+			map[string]interface{}{"name": "oci-digest", "type": "string"},
+		},
 		"results": []interface{}{
 			map[string]interface{}{
 				"name":        "signature",
@@ -723,5 +732,9 @@ echo "$SIGN_TARGET" > $(results.signature.path)
 		"name":     taskCosignSign,
 		"taskSpec": taskSpec,
 		"runAfter": []interface{}{runAfter},
+		"params": []interface{}{
+			map[string]interface{}{"name": "oci-ref", "value": "$(tasks.oci-push.results.oci-ref)"},
+			map[string]interface{}{"name": "oci-digest", "value": "$(tasks.oci-push.results.oci-digest)"},
+		},
 	}
 }

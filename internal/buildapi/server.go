@@ -534,7 +534,7 @@ func toSummary(bj *buildv1alpha1.BuildJob) BuildJobSummary {
 		ArtifactURI:       bj.Status.ArtifactURI,
 		OCIArtifactRef:       bj.Status.OCIArtifactRef,
 		OCIArtifactDigest:    bj.Status.OCIArtifactDigest,
-		OCISignatureVerified: bj.Status.OCISignatureVerified,
+		OCISigned:            bj.Status.OCISigned,
 		PipelineRun:    bj.Status.CurrentPipelineRun,
 	}
 

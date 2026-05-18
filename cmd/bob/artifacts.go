@@ -36,7 +36,7 @@ func newArtifactsCmd() *cobra.Command {
 
 			if build.OCIArtifactRef != "" {
 				if downloadDir != "" {
-					if build.OCISignatureVerified && !skipVerify {
+					if build.OCISigned && !skipVerify {
 						if err := verifyCosignSignature(build.OCIArtifactRef, build.OCIArtifactDigest); err != nil {
 							fmt.Fprintf(os.Stderr, "WARNING: signature verification failed: %v\n", err)
 							fmt.Fprintf(os.Stderr, "Use --skip-verify to bypass signature checks\n\n")
@@ -51,7 +51,7 @@ func newArtifactsCmd() *cobra.Command {
 				if build.OCIArtifactDigest != "" {
 					fmt.Printf("  %s\n", build.OCIArtifactDigest)
 				}
-				if build.OCISignatureVerified {
+				if build.OCISigned {
 					fmt.Printf("  Signed: yes (cosign)\n")
 				}
 				fmt.Println()
@@ -61,8 +61,14 @@ func newArtifactsCmd() *cobra.Command {
 				} else {
 					fmt.Printf("  oras pull %s --output ./\n\n", build.OCIArtifactRef)
 				}
-				fmt.Printf("Verify signature:\n")
-				fmt.Printf("  cosign verify --key cosign.pub %s\n\n", build.OCIArtifactRef)
+				if build.OCISigned {
+					verifyRef := build.OCIArtifactRef
+					if build.OCIArtifactDigest != "" {
+						verifyRef = fmt.Sprintf("%s@%s", build.OCIArtifactRef, build.OCIArtifactDigest)
+					}
+					fmt.Printf("Verify signature:\n")
+					fmt.Printf("  cosign verify --key cosign.pub %s\n\n", verifyRef)
+				}
 				fmt.Printf("Inspect manifest:\n")
 				fmt.Printf("  oras manifest fetch %s | jq\n", build.OCIArtifactRef)
 				return nil
@@ -181,7 +187,12 @@ func verifyCosignSignature(ref, digest string) error {
 	}
 
 	fmt.Printf("Verifying signature for %s...\n", verifyRef)
-	cmd := exec.Command(cosignPath, "verify", "--key", pubKeyPath, "--insecure-ignore-tlog", verifyRef)
+	args := []string{"verify", "--key", pubKeyPath}
+	if os.Getenv("COSIGN_IGNORE_TLOG") != "" {
+		args = append(args, "--insecure-ignore-tlog")
+	}
+	args = append(args, verifyRef)
+	cmd := exec.Command(cosignPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

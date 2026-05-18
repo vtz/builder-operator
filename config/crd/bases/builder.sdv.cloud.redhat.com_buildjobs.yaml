@@ -148,6 +148,8 @@ spec:
                                 name:
                                   type: string
                                   minLength: 1
+                                key:
+                                  type: string
                               required: [name]
                             cosignPasswordSecret:
                               type: object
@@ -155,6 +157,9 @@ spec:
                                 name:
                                   type: string
                                   minLength: 1
+                                key:
+                                  type: string
+                              required: [name]
                           required: [cosignSecret]
                       required: [repository]
                 caches:
@@ -181,7 +186,7 @@ spec:
                   type: string
                 ociArtifactDigest:
                   type: string
-                ociSignatureVerified:
+                ociSigned:
                   type: boolean
                 failureReason:
                   type: string

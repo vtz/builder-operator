@@ -184,7 +184,7 @@ type BuildJobStatus struct {
 	// +optional
 	OCIArtifactDigest string `json:"ociArtifactDigest,omitempty"`
 	// +optional
-	OCISignatureVerified bool `json:"ociSignatureVerified,omitempty"`
+	OCISigned bool `json:"ociSigned,omitempty"`
 	// +optional
 	FailureReason string `json:"failureReason,omitempty"`
 	// +optional

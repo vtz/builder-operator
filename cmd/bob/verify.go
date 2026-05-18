@@ -54,7 +54,7 @@ func newVerifyCmd() *cobra.Command {
 			}
 
 			fmt.Printf("\nBuild %q: signature verified OK\n", name)
-			if build.OCISignatureVerified {
+			if build.OCISigned {
 				fmt.Printf("  Pipeline also recorded successful signing\n")
 			}
 			return nil

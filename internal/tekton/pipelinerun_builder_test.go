@@ -928,6 +928,74 @@ func TestBuildPipelineRun_CosignSignTask(t *testing.T) {
 	if secret["secretName"] != "cosign-signing-key" {
 		t.Fatalf("expected secretName 'cosign-signing-key', got %v", secret["secretName"])
 	}
+
+	taskParams := taskSpec["params"].([]interface{})
+	if len(taskParams) != 2 {
+		t.Fatalf("expected 2 declared params (oci-ref, oci-digest), got %d", len(taskParams))
+	}
+
+	pipelineParams := signTask["params"].([]interface{})
+	if len(pipelineParams) != 2 {
+		t.Fatalf("expected 2 pipeline-level params bindings, got %d", len(pipelineParams))
+	}
+	refParam := pipelineParams[0].(map[string]interface{})
+	if refParam["value"] != "$(tasks.oci-push.results.oci-ref)" {
+		t.Fatalf("expected oci-ref param bound to oci-push result, got %v", refParam["value"])
+	}
+}
+
+func TestBuildPipelineRun_CosignSignTask_WithPushSecret_RemapsDockerConfig(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+			PushSecret: &buildv1alpha1.SecretReference{Name: "quay-creds"},
+			Signing: &buildv1alpha1.SigningConfig{
+				CosignSecret: buildv1alpha1.SecretReference{Name: "cosign-key"},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	var signTask map[string]interface{}
+	for _, task := range tasks {
+		taskMap := task.(map[string]interface{})
+		if taskMap["name"] == taskCosignSign {
+			signTask = taskMap
+			break
+		}
+	}
+	if signTask == nil {
+		t.Fatal("expected cosign-sign task")
+	}
+
+	taskSpec := signTask["taskSpec"].(map[string]interface{})
+	volumes := taskSpec["volumes"].([]interface{})
+
+	var pushSecretVol map[string]interface{}
+	for _, v := range volumes {
+		vm := v.(map[string]interface{})
+		if vm["name"] == "push-secret" {
+			pushSecretVol = vm
+			break
+		}
+	}
+	if pushSecretVol == nil {
+		t.Fatal("expected push-secret volume when pushSecret is configured")
+	}
+
+	secretSpec := pushSecretVol["secret"].(map[string]interface{})
+	items := secretSpec["items"].([]interface{})
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item mapping, got %d", len(items))
+	}
+	item := items[0].(map[string]interface{})
+	if item["key"] != ".dockerconfigjson" || item["path"] != "config.json" {
+		t.Fatalf("expected .dockerconfigjson -> config.json mapping, got %v -> %v", item["key"], item["path"])
+	}
 }
 
 func TestBuildPipelineRun_CosignSignTask_WithPassword(t *testing.T) {
@@ -1003,6 +1071,49 @@ func TestBuildPipelineRun_NoSigningTask_WhenNotConfigured(t *testing.T) {
 		if taskMap["name"] == taskCosignSign {
 			t.Fatal("should NOT have cosign-sign task when signing is not configured")
 		}
+	}
+}
+
+func TestBuildPipelineRun_CosignSignTask_ScriptHandlesEmptyRef(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+			Signing: &buildv1alpha1.SigningConfig{
+				CosignSecret: buildv1alpha1.SecretReference{Name: "cosign-key"},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	var signTask map[string]interface{}
+	for _, task := range tasks {
+		taskMap := task.(map[string]interface{})
+		if taskMap["name"] == taskCosignSign {
+			signTask = taskMap
+			break
+		}
+	}
+	if signTask == nil {
+		t.Fatal("expected cosign-sign task")
+	}
+
+	taskSpec := signTask["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	script := step["script"].(string)
+
+	if !strings.Contains(script, `if [ -z "$REF" ]`) {
+		t.Fatal("script must short-circuit when REF param is empty")
+	}
+	if !strings.Contains(script, "skipping signing") {
+		t.Fatal("script must print skip message when REF is empty")
+	}
+	if !strings.Contains(script, `$(params.oci-ref)`) {
+		t.Fatal("script must use $(params.oci-ref) instead of workspace/result references")
 	}
 }
 

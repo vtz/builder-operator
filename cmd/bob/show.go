@@ -70,7 +70,7 @@ func newShowCmd() *cobra.Command {
 				if bj.OCIArtifactDigest != "" {
 					fmt.Printf("OCI Digest:  %s\n", bj.OCIArtifactDigest)
 				}
-				if bj.OCISignatureVerified {
+				if bj.OCISigned {
 					fmt.Printf("Signed:      yes (cosign)\n")
 				}
 			}

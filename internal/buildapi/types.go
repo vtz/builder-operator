@@ -28,7 +28,7 @@ type BuildJobSummary struct {
 	ArtifactURI       string      `json:"artifactURI,omitempty"`
 	OCIArtifactRef       string      `json:"ociArtifactRef,omitempty"`
 	OCIArtifactDigest    string      `json:"ociArtifactDigest,omitempty"`
-	OCISignatureVerified bool        `json:"ociSignatureVerified,omitempty"`
+	OCISigned            bool        `json:"ociSigned,omitempty"`
 	Stages         []StageInfo `json:"stages,omitempty"`
 	PipelineRun    string      `json:"pipelineRun,omitempty"`
 	Source         *SourceInfo `json:"source,omitempty"`

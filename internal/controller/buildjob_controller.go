@@ -338,7 +338,7 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 			}
 		case "oci-signature":
 			if value != "" {
-				bj.Status.OCISignatureVerified = true
+				bj.Status.OCISigned = true
 			}
 		}
 	}
