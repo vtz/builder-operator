@@ -65,6 +65,15 @@ func newShowCmd() *cobra.Command {
 			if bj.ArtifactURI != "" {
 				fmt.Printf("Artifact:    %s\n", bj.ArtifactURI)
 			}
+			if bj.OCIArtifactRef != "" {
+				fmt.Printf("OCI Ref:     %s\n", bj.OCIArtifactRef)
+				if bj.OCIArtifactDigest != "" {
+					fmt.Printf("OCI Digest:  %s\n", bj.OCIArtifactDigest)
+				}
+				if bj.OCISignatureVerified {
+					fmt.Printf("Signed:      yes (cosign)\n")
+				}
+			}
 
 			if len(bj.Stages) > 0 {
 				fmt.Println("\nStages:")

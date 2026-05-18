@@ -867,6 +867,179 @@ func TestBuildPipelineRun_PVCArtifactStillWorks(t *testing.T) {
 	}
 }
 
+func TestBuildPipelineRun_CosignSignTask(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+			PushSecret: &buildv1alpha1.SecretReference{Name: "quay-creds"},
+			Signing: &buildv1alpha1.SigningConfig{
+				CosignSecret: buildv1alpha1.SecretReference{Name: "cosign-signing-key"},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	var signTask map[string]interface{}
+	for _, task := range tasks {
+		taskMap := task.(map[string]interface{})
+		if taskMap["name"] == "cosign-sign" {
+			signTask = taskMap
+			break
+		}
+	}
+	if signTask == nil {
+		t.Fatal("expected cosign-sign task in pipeline when signing is configured")
+	}
+
+	runAfter := signTask["runAfter"].([]interface{})
+	if runAfter[0] != "oci-push" {
+		t.Fatalf("cosign-sign should runAfter oci-push, got %v", runAfter[0])
+	}
+
+	taskSpec := signTask["taskSpec"].(map[string]interface{})
+	results := taskSpec["results"].([]interface{})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result in cosign-sign task, got %d", len(results))
+	}
+	resultName := results[0].(map[string]interface{})["name"]
+	if resultName != "signature" {
+		t.Fatalf("expected result named 'signature', got %s", resultName)
+	}
+
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	if step["image"] != CosignImage {
+		t.Fatalf("expected cosign image %s, got %v", CosignImage, step["image"])
+	}
+
+	volumes := taskSpec["volumes"].([]interface{})
+	if len(volumes) < 1 {
+		t.Fatal("expected at least 1 volume (cosign-key)")
+	}
+	cosignVol := volumes[0].(map[string]interface{})
+	if cosignVol["name"] != "cosign-key" {
+		t.Fatalf("expected cosign-key volume, got %v", cosignVol["name"])
+	}
+	secret := cosignVol["secret"].(map[string]interface{})
+	if secret["secretName"] != "cosign-signing-key" {
+		t.Fatalf("expected secretName 'cosign-signing-key', got %v", secret["secretName"])
+	}
+}
+
+func TestBuildPipelineRun_CosignSignTask_WithPassword(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+			Signing: &buildv1alpha1.SigningConfig{
+				CosignSecret:         buildv1alpha1.SecretReference{Name: "cosign-key"},
+				CosignPasswordSecret: &buildv1alpha1.SecretReference{Name: "cosign-password"},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	var signTask map[string]interface{}
+	for _, task := range tasks {
+		taskMap := task.(map[string]interface{})
+		if taskMap["name"] == "cosign-sign" {
+			signTask = taskMap
+			break
+		}
+	}
+	if signTask == nil {
+		t.Fatal("expected cosign-sign task")
+	}
+
+	taskSpec := signTask["taskSpec"].(map[string]interface{})
+	steps := taskSpec["steps"].([]interface{})
+	step := steps[0].(map[string]interface{})
+	env := step["env"].([]interface{})
+
+	var foundPasswordEnv bool
+	for _, e := range env {
+		envMap := e.(map[string]interface{})
+		if envMap["name"] == "COSIGN_PASSWORD" {
+			valueFrom, ok := envMap["valueFrom"].(map[string]interface{})
+			if !ok {
+				t.Fatal("expected COSIGN_PASSWORD from secretKeyRef when password secret is specified")
+			}
+			secretRef := valueFrom["secretKeyRef"].(map[string]interface{})
+			if secretRef["name"] != "cosign-password" {
+				t.Fatalf("expected secret name 'cosign-password', got %v", secretRef["name"])
+			}
+			if secretRef["key"] != "cosign.password" {
+				t.Fatalf("expected key 'cosign.password', got %v", secretRef["key"])
+			}
+			foundPasswordEnv = true
+		}
+	}
+	if !foundPasswordEnv {
+		t.Fatal("expected COSIGN_PASSWORD env var with secretKeyRef")
+	}
+}
+
+func TestBuildPipelineRun_NoSigningTask_WhenNotConfigured(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+		},
+	}
+	pr := BuildPipelineRun(bj)
+	tasks := getPipelineTasks(t, pr)
+
+	for _, task := range tasks {
+		taskMap := task.(map[string]interface{})
+		if taskMap["name"] == "cosign-sign" {
+			t.Fatal("should NOT have cosign-sign task when signing is not configured")
+		}
+	}
+}
+
+func TestBuildPipelineRun_SigningResult_InPipeline(t *testing.T) {
+	bj := newTestBuildJob()
+	bj.Spec.Artifacts = buildv1alpha1.ArtifactSpec{
+		Destination: buildv1alpha1.ArtifactDestinationOCI,
+		Path:        "/workspace/artifacts",
+		OCI: &buildv1alpha1.OCIArtifactConfig{
+			Repository: "quay.io/myorg/firmware",
+			Signing: &buildv1alpha1.SigningConfig{
+				CosignSecret: buildv1alpha1.SecretReference{Name: "cosign-key"},
+			},
+		},
+	}
+	pr := BuildPipelineRun(bj)
+
+	spec := pr.Object["spec"].(map[string]interface{})
+	ps := spec["pipelineSpec"].(map[string]interface{})
+	results := ps["results"].([]interface{})
+
+	var found bool
+	for _, r := range results {
+		rm := r.(map[string]interface{})
+		if rm["name"] == "oci-signature" {
+			found = true
+			val := rm["value"].(string)
+			if !strings.Contains(val, "cosign-sign") {
+				t.Fatalf("expected oci-signature result to reference cosign-sign task, got %s", val)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected oci-signature in pipeline results when signing is configured")
+	}
+}
+
 func getPipelineTasks(t *testing.T, pr *unstructured.Unstructured) []interface{} {
 	t.Helper()
 	spec := pr.Object["spec"].(map[string]interface{})

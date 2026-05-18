@@ -54,6 +54,7 @@ Configure via environment variables:
 		newDeleteCmd(),
 		newArtifactsCmd(),
 		newSyncCmd(),
+		newVerifyCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

@@ -27,6 +27,7 @@ const (
 	PipelineRunKind  = "PipelineRun"
 	GitCloneImage    = "alpine/git:latest"
 	OrasImage        = "ghcr.io/oras-project/oras:v1.2.0"
+	CosignImage      = "gcr.io/projectsigstore/cosign:v2.4.1"
 
 	workspaceName     = "shared-workspace"
 	taskWorkspaceName = "ws"
@@ -125,6 +126,10 @@ echo "Copied PVC source to workspace"
 			if bj.Spec.Artifacts.OCI != nil {
 				ociTask := buildOCIArtifactTask(bj, envVars, prevStage)
 				tasks = append(tasks, ociTask)
+				if bj.Spec.Artifacts.OCI.Signing != nil {
+					signTask := buildCosignSignTask(bj, "oci-push")
+					tasks = append(tasks, signTask)
+				}
 			}
 		default:
 			uploadScript := fmt.Sprintf(`#!/usr/bin/env bash
@@ -219,6 +224,12 @@ if r.status >= 400:
 				"value": "$(tasks.oci-push.results.oci-digest)",
 			},
 		)
+		if bj.Spec.Artifacts.OCI.Signing != nil {
+			pipelineResults = append(pipelineResults, map[string]interface{}{
+				"name":  "oci-signature",
+				"value": "$(tasks.cosign-sign.results.signature)",
+			})
+		}
 	}
 	if len(pipelineResults) > 0 {
 		pipelineSpec["results"] = pipelineResults
@@ -593,4 +604,123 @@ func buildEnvVars(bj *buildv1alpha1.BuildJob) []interface{} {
 
 func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func buildCosignSignTask(bj *buildv1alpha1.BuildJob, runAfter string) map[string]interface{} {
+	signing := bj.Spec.Artifacts.OCI.Signing
+
+	script := `#!/usr/bin/env sh
+set -eu
+export HOME=/tmp/cosign-home
+mkdir -p "$HOME"
+
+REF=$(cat $(workspaces.ws.path)/oci-ref-result 2>/dev/null || cat $(results.oci-ref.path) 2>/dev/null || true)
+DIGEST=$(cat $(workspaces.ws.path)/oci-digest-result 2>/dev/null || true)
+
+if [ -z "$REF" ]; then
+  REF="$(tasks.oci-push.results.oci-ref)"
+fi
+if [ -z "$DIGEST" ]; then
+  DIGEST="$(tasks.oci-push.results.oci-digest)"
+fi
+
+SIGN_TARGET="$REF@$DIGEST"
+if [ -z "$DIGEST" ] || [ "$DIGEST" = "" ]; then
+  SIGN_TARGET="$REF"
+fi
+
+echo "Signing OCI artifact: $SIGN_TARGET"
+cosign sign --key /etc/cosign/cosign.key \
+  --yes \
+  --tlog-upload=false \
+  --registry-referrers-mode=oci-1-1 \
+  "$SIGN_TARGET"
+
+echo "Signature attached to $SIGN_TARGET"
+echo "$SIGN_TARGET" > $(results.signature.path)
+`
+
+	volumes := []interface{}{
+		map[string]interface{}{
+			"name": "cosign-key",
+			"secret": map[string]interface{}{
+				"secretName": signing.CosignSecret.Name,
+			},
+		},
+	}
+	volumeMounts := []interface{}{
+		map[string]interface{}{
+			"name":      "cosign-key",
+			"mountPath": "/etc/cosign",
+			"readOnly":  true,
+		},
+	}
+
+	env := []interface{}{}
+	if signing.CosignPasswordSecret != nil {
+		env = append(env, map[string]interface{}{
+			"name": "COSIGN_PASSWORD",
+			"valueFrom": map[string]interface{}{
+				"secretKeyRef": map[string]interface{}{
+					"name": signing.CosignPasswordSecret.Name,
+					"key":  "cosign.password",
+				},
+			},
+		})
+	} else {
+		env = append(env, map[string]interface{}{
+			"name":  "COSIGN_PASSWORD",
+			"value": "",
+		})
+	}
+
+	if bj.Spec.Artifacts.OCI.PushSecret != nil {
+		env = append(env, map[string]interface{}{
+			"name":  "DOCKER_CONFIG",
+			"value": "/etc/oci-push-secret",
+		})
+		volumes = append(volumes, map[string]interface{}{
+			"name": "push-secret",
+			"secret": map[string]interface{}{
+				"secretName": bj.Spec.Artifacts.OCI.PushSecret.Name,
+			},
+		})
+		volumeMounts = append(volumeMounts, map[string]interface{}{
+			"name":      "push-secret",
+			"mountPath": "/etc/oci-push-secret",
+			"readOnly":  true,
+		})
+	}
+
+	allowPrivEsc := false
+	var runAsUser int64 = 1000
+	step := map[string]interface{}{
+		"name":         "cosign-sign",
+		"image":        CosignImage,
+		"env":          env,
+		"volumeMounts": volumeMounts,
+		"securityContext": map[string]interface{}{
+			"allowPrivilegeEscalation": allowPrivEsc,
+			"runAsNonRoot":             true,
+			"runAsUser":                runAsUser,
+		},
+		"script": script,
+	}
+
+	taskSpec := map[string]interface{}{
+		"results": []interface{}{
+			map[string]interface{}{
+				"name":        "signature",
+				"description": "Signed artifact reference",
+			},
+		},
+		"steps":   []interface{}{step},
+		"volumes": volumes,
+	}
+
+	return map[string]interface{}{
+		"name":     "cosign-sign",
+		"taskSpec": taskSpec,
+		"runAfter": []interface{}{runAfter},
+	}
 }

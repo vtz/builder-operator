@@ -336,6 +336,10 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 			if value != "" {
 				bj.Status.OCIArtifactDigest = strings.TrimSpace(value)
 			}
+		case "oci-signature":
+			if value != "" {
+				bj.Status.OCISignatureVerified = true
+			}
 		}
 	}
 }

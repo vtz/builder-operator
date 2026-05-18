@@ -17,6 +17,7 @@ import (
 
 func newArtifactsCmd() *cobra.Command {
 	var downloadDir string
+	var skipVerify bool
 
 	cmd := &cobra.Command{
 		Use:     "artifacts [name]",
@@ -35,12 +36,23 @@ func newArtifactsCmd() *cobra.Command {
 
 			if build.OCIArtifactRef != "" {
 				if downloadDir != "" {
+					if !skipVerify {
+						if err := verifyCosignSignature(build.OCIArtifactRef, build.OCIArtifactDigest); err != nil {
+							fmt.Fprintf(os.Stderr, "WARNING: signature verification failed: %v\n", err)
+							fmt.Fprintf(os.Stderr, "Use --skip-verify to bypass signature checks\n\n")
+							return fmt.Errorf("signature verification failed: %w", err)
+						}
+						fmt.Printf("Signature verified OK\n\n")
+					}
 					return downloadOCIArtifact(build.OCIArtifactRef, build.OCIArtifactDigest, downloadDir)
 				}
 				fmt.Printf("Artifacts pushed as OCI artifact:\n\n")
 				fmt.Printf("  %s\n", build.OCIArtifactRef)
 				if build.OCIArtifactDigest != "" {
 					fmt.Printf("  %s\n", build.OCIArtifactDigest)
+				}
+				if build.OCISignatureVerified {
+					fmt.Printf("  Signed: yes (cosign)\n")
 				}
 				fmt.Println()
 				fmt.Printf("Pull with:\n")
@@ -49,6 +61,8 @@ func newArtifactsCmd() *cobra.Command {
 				} else {
 					fmt.Printf("  oras pull %s --output ./\n\n", build.OCIArtifactRef)
 				}
+				fmt.Printf("Verify signature:\n")
+				fmt.Printf("  cosign verify --key cosign.pub %s\n\n", build.OCIArtifactRef)
 				fmt.Printf("Inspect manifest:\n")
 				fmt.Printf("  oras manifest fetch %s | jq\n", build.OCIArtifactRef)
 				return nil
@@ -81,6 +95,7 @@ func newArtifactsCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&downloadDir, "download", "d", "", "Download all artifacts to this directory")
+	cmd.Flags().BoolVar(&skipVerify, "skip-verify", false, "Skip cosign signature verification on download")
 	return cmd
 }
 
@@ -141,6 +156,36 @@ func downloadOCIArtifact(ref, digest, dir string) error {
 	fmt.Printf("\nDownloaded %d artifact(s) to %s/\n", len(entries), dir)
 	for _, e := range entries {
 		fmt.Printf("  %s\n", e.Name())
+	}
+	return nil
+}
+
+func verifyCosignSignature(ref, digest string) error {
+	cosignPath, err := exec.LookPath("cosign")
+	if err != nil {
+		return fmt.Errorf("cosign CLI not found in PATH — install from https://docs.sigstore.dev/cosign/installation")
+	}
+
+	verifyRef := ref
+	if digest != "" {
+		verifyRef = ref + "@" + digest
+	}
+
+	pubKeyPath := os.Getenv("COSIGN_PUB_KEY")
+	if pubKeyPath == "" {
+		pubKeyPath = "cosign.pub"
+	}
+
+	if _, err := os.Stat(pubKeyPath); os.IsNotExist(err) {
+		return fmt.Errorf("public key not found at %s (set COSIGN_PUB_KEY to override)", pubKeyPath)
+	}
+
+	fmt.Printf("Verifying signature for %s...\n", verifyRef)
+	cmd := exec.Command(cosignPath, "verify", "--key", pubKeyPath, "--insecure-ignore-tlog", verifyRef)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("cosign verify failed: %w", err)
 	}
 	return nil
 }
