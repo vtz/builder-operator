@@ -319,6 +319,7 @@ func (r *BuildJobReconciler) syncStatusFromPipelineRun(bj *buildv1alpha1.BuildJo
 		}
 	}
 
+	bj.Status.OCISigned = false
 	results, _, _ := unstructured.NestedSlice(pr.Object, "status", "results")
 	for _, result := range results {
 		m, ok := result.(map[string]interface{})
