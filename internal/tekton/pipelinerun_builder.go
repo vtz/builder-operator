@@ -33,6 +33,7 @@ const (
 	taskWorkspaceName = "ws"
 	taskCopySource    = "copy-source"
 	taskClone         = "clone"
+	taskCosignSign    = "cosign-sign"
 	cacheVolumeName   = "bob-cache"
 
 	DefaultFirmwareMediaType = "application/vnd.auto.firmware.layer.v1"
@@ -695,7 +696,7 @@ echo "$SIGN_TARGET" > $(results.signature.path)
 	allowPrivEsc := false
 	var runAsUser int64 = 1000
 	step := map[string]interface{}{
-		"name":         "cosign-sign",
+		"name":         taskCosignSign,
 		"image":        CosignImage,
 		"env":          env,
 		"volumeMounts": volumeMounts,
@@ -719,7 +720,7 @@ echo "$SIGN_TARGET" > $(results.signature.path)
 	}
 
 	return map[string]interface{}{
-		"name":     "cosign-sign",
+		"name":     taskCosignSign,
 		"taskSpec": taskSpec,
 		"runAfter": []interface{}{runAfter},
 	}

@@ -886,7 +886,7 @@ func TestBuildPipelineRun_CosignSignTask(t *testing.T) {
 	var signTask map[string]interface{}
 	for _, task := range tasks {
 		taskMap := task.(map[string]interface{})
-		if taskMap["name"] == "cosign-sign" {
+		if taskMap["name"] == taskCosignSign {
 			signTask = taskMap
 			break
 		}
@@ -949,7 +949,7 @@ func TestBuildPipelineRun_CosignSignTask_WithPassword(t *testing.T) {
 	var signTask map[string]interface{}
 	for _, task := range tasks {
 		taskMap := task.(map[string]interface{})
-		if taskMap["name"] == "cosign-sign" {
+		if taskMap["name"] == taskCosignSign {
 			signTask = taskMap
 			break
 		}
@@ -1000,7 +1000,7 @@ func TestBuildPipelineRun_NoSigningTask_WhenNotConfigured(t *testing.T) {
 
 	for _, task := range tasks {
 		taskMap := task.(map[string]interface{})
-		if taskMap["name"] == "cosign-sign" {
+		if taskMap["name"] == taskCosignSign {
 			t.Fatal("should NOT have cosign-sign task when signing is not configured")
 		}
 	}
@@ -1030,7 +1030,7 @@ func TestBuildPipelineRun_SigningResult_InPipeline(t *testing.T) {
 		if rm["name"] == "oci-signature" {
 			found = true
 			val := rm["value"].(string)
-			if !strings.Contains(val, "cosign-sign") {
+			if !strings.Contains(val, taskCosignSign) {
 				t.Fatalf("expected oci-signature result to reference cosign-sign task, got %s", val)
 			}
 		}
