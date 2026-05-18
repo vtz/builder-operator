@@ -36,7 +36,7 @@ func newArtifactsCmd() *cobra.Command {
 
 			if build.OCIArtifactRef != "" {
 				if downloadDir != "" {
-					if !skipVerify {
+					if build.OCISignatureVerified && !skipVerify {
 						if err := verifyCosignSignature(build.OCIArtifactRef, build.OCIArtifactDigest); err != nil {
 							fmt.Fprintf(os.Stderr, "WARNING: signature verification failed: %v\n", err)
 							fmt.Fprintf(os.Stderr, "Use --skip-verify to bypass signature checks\n\n")

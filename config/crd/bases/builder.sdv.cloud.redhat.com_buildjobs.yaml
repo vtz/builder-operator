@@ -139,6 +139,23 @@ spec:
                               type: string
                         mediaType:
                           type: string
+                        signing:
+                          type: object
+                          properties:
+                            cosignSecret:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                  minLength: 1
+                              required: [name]
+                            cosignPasswordSecret:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                  minLength: 1
+                          required: [cosignSecret]
                       required: [repository]
                 caches:
                   type: array
@@ -164,6 +181,8 @@ spec:
                   type: string
                 ociArtifactDigest:
                   type: string
+                ociSignatureVerified:
+                  type: boolean
                 failureReason:
                   type: string
                 commitSHA:
