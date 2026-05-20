@@ -37,6 +37,8 @@ func newBuildCmd() *cobra.Command {
 	var sourceDir string
 	var outputDir string
 	var pvcName string
+	var downloadDir string
+	var skipVerify bool
 
 	cmd := &cobra.Command{
 		Use:   "build [name]",
@@ -48,9 +50,13 @@ func newBuildCmd() *cobra.Command {
   bob build body-ecu-nucleo                        # re-trigger existing BuildJob
   bob build body-ecu-mpu-hostlike --local                  # sync . and build
   bob build body-ecu-mpu-hostlike --local --source ~/code  # sync specific dir
+  bob build body-ecu-nucleo -d ./out              # build and download artifacts
 
 When --local is used, the BuildJob is temporarily switched to use your local
-source. The next build without --local automatically restores git source.`,
+source. The next build without --local automatically restores git source.
+
+When -d is used, the CLI waits for the build to complete and automatically
+downloads the resulting artifacts to the specified directory.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ns := firstNonEmpty(bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
 			if local {
@@ -69,10 +75,23 @@ source. The next build without --local automatically restores git source.`,
 					return err
 				}
 				cleanupSyncPod(kubecli, ns, pvcName)
-				return switchToPVCAndTrigger(kubecli, ns, args[0], pvcName, "/")
+				if err := switchToPVCAndTrigger(kubecli, ns, args[0], pvcName, "/"); err != nil {
+					return err
+				}
+				if downloadDir != "" {
+					return waitAndDownload(cmd.Context(), args[0], downloadDir, skipVerify)
+				}
+				return nil
 			}
 			if file != "" {
-				return createFromFile(cmd.Context(), file, branch)
+				name, err := createFromFile(cmd.Context(), file, branch)
+				if err != nil {
+					return err
+				}
+				if downloadDir != "" {
+					return waitAndDownload(cmd.Context(), name, downloadDir, skipVerify)
+				}
+				return nil
 			}
 			if len(args) == 0 {
 				return fmt.Errorf("provide a BuildJob name or use -f <file>")
@@ -80,7 +99,13 @@ source. The next build without --local automatically restores git source.`,
 			if err := autoRestoreIfLocal(ns, args[0]); err != nil {
 				return fmt.Errorf("restoring git source: %w", err)
 			}
-			return retrigger(cmd.Context(), args[0])
+			if err := retrigger(cmd.Context(), args[0]); err != nil {
+				return err
+			}
+			if downloadDir != "" {
+				return waitAndDownload(cmd.Context(), args[0], downloadDir, skipVerify)
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "Path to BuildJob YAML file")
@@ -89,19 +114,21 @@ source. The next build without --local automatically restores git source.`,
 	cmd.Flags().StringVar(&sourceDir, "source", ".", "Local source directory (used with --local)")
 	cmd.Flags().StringVar(&outputDir, "output", "./bob-output", "Local output directory for artifacts (used with --local -f)")
 	cmd.Flags().StringVar(&pvcName, "pvc", "source-code", "PVC name for local source upload")
+	cmd.Flags().StringVarP(&downloadDir, "download", "d", "", "Wait for build to finish and download artifacts to this directory")
+	cmd.Flags().BoolVar(&skipVerify, "skip-verify", false, "Skip cosign signature verification on download")
 	return cmd
 }
 
-func createFromFile(ctx context.Context, path string, branch string) error {
+func createFromFile(ctx context.Context, path string, branch string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("reading file: %w", err)
+		return "", fmt.Errorf("reading file: %w", err)
 	}
 
 	var bj buildv1alpha1.BuildJob
 	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 4096)
 	if err := decoder.Decode(&bj); err != nil {
-		return fmt.Errorf("parsing YAML: %w", err)
+		return "", fmt.Errorf("parsing YAML: %w", err)
 	}
 
 	if branch != "" && bj.Spec.Source.Git != nil {
@@ -123,7 +150,7 @@ func createFromFile(ctx context.Context, path string, branch string) error {
 	url := fmt.Sprintf("%s/v1/namespaces/%s/buildjobs", c.BaseURL, ns)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
+		return "", fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.Token != "" {
@@ -132,18 +159,18 @@ func createFromFile(ctx context.Context, path string, branch string) error {
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
+		return "", fmt.Errorf("sending request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("server error %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("server error %d: %s", resp.StatusCode, string(body))
 	}
 
 	var result buildapi.BuildJobSummary
 	if err := json.Unmarshal(body, &result); err != nil {
-		return fmt.Errorf("decoding response: %w", err)
+		return "", fmt.Errorf("decoding response: %w", err)
 	}
 
 	fmt.Printf("BuildJob created: %s\n", result.Name)
@@ -153,7 +180,7 @@ func createFromFile(ctx context.Context, path string, branch string) error {
 	fmt.Printf("  Image:     %s\n", result.Image)
 	fmt.Printf("\nWatch progress: bob list\n")
 	fmt.Printf("Stream logs:   bob logs %s\n", result.Name)
-	return nil
+	return result.Name, nil
 }
 
 func autoRestoreIfLocal(namespace, bjName string) error {
