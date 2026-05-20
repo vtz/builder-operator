@@ -46,6 +46,10 @@ const (
 	DefaultMaxUploadFiles         = 1000
 	DefaultMaxFileBytes     int64 = 512 << 20 // 512 MiB per file
 	DefaultUploadTimeoutSec       = 300
+
+	conditionTypeSucceeded = "Succeeded"
+	conditionStatusTrue    = "True"
+	conditionStatusFalse   = "False"
 )
 
 type Server struct {
@@ -641,7 +645,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		}
 
 		conditions, _, _ := unstructured.NestedSlice(pr.Object, "status", "conditions")
-		entry.Phase = "Running"
+		entry.Phase = string(buildv1alpha1.PhaseRunning)
 		for _, c := range conditions {
 			m, ok := c.(map[string]interface{})
 			if !ok {
@@ -649,18 +653,18 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			}
 			t, _, _ := unstructured.NestedString(m, "type")
 			s, _, _ := unstructured.NestedString(m, "status")
-			if t == "Succeeded" {
+			if t == conditionTypeSucceeded {
 				switch s {
-				case "True":
-					entry.Phase = "Succeeded"
-				case "False":
-					entry.Phase = "Failed"
+				case conditionStatusTrue:
+					entry.Phase = string(buildv1alpha1.PhaseSucceeded)
+				case conditionStatusFalse:
+					entry.Phase = string(buildv1alpha1.PhaseFailed)
 				}
 			}
 		}
 
-		if startTime == "" && entry.Phase == "Running" {
-			entry.Phase = "Pending"
+		if startTime == "" && entry.Phase == string(buildv1alpha1.PhaseRunning) {
+			entry.Phase = string(buildv1alpha1.PhasePending)
 		}
 
 		results, _, _ := unstructured.NestedSlice(pr.Object, "status", "results")
