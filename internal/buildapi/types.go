@@ -33,6 +33,9 @@ type BuildJobSummary struct {
 	PipelineRun    string      `json:"pipelineRun,omitempty"`
 	Source         *SourceInfo `json:"source,omitempty"`
 	Age            string      `json:"age,omitempty"`
+	CreatedAt      string      `json:"createdAt,omitempty"`
+	StartedAt      string      `json:"startedAt,omitempty"`
+	CompletedAt    string      `json:"completedAt,omitempty"`
 }
 
 type StageInfo struct {
@@ -61,12 +64,28 @@ type ErrorResponse struct {
 }
 
 type ArtifactFileInfo struct {
-	Name string `json:"name"`
-	Size int64  `json:"size"`
+	Name    string `json:"name"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"modTime,omitempty"`
 }
 
 type ArtifactListResponse struct {
 	BuildJob  string             `json:"buildJob"`
 	Namespace string             `json:"namespace"`
 	Files     []ArtifactFileInfo `json:"files"`
+}
+
+type BuildHistoryEntry struct {
+	Run         int64  `json:"run"`
+	Name        string `json:"name"`
+	Phase       string `json:"phase"`
+	StartedAt   string `json:"startedAt,omitempty"`
+	CompletedAt string `json:"completedAt,omitempty"`
+	Duration    string `json:"duration,omitempty"`
+	CommitSHA   string `json:"commitSHA,omitempty"`
+}
+
+type BuildHistoryResponse struct {
+	BuildJob string              `json:"buildJob"`
+	Entries  []BuildHistoryEntry `json:"entries"`
 }

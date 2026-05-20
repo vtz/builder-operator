@@ -39,6 +39,16 @@ func newShowCmd() *cobra.Command {
 			fmt.Printf("Phase:       %s\n", bj.Phase)
 			fmt.Printf("PipelineRun: %s\n", bj.PipelineRun)
 
+			if bj.CreatedAt != "" {
+				fmt.Printf("Created:     %s\n", bj.CreatedAt)
+			}
+			if bj.StartedAt != "" {
+				fmt.Printf("Started:     %s\n", bj.StartedAt)
+			}
+			if bj.CompletedAt != "" {
+				fmt.Printf("Completed:   %s\n", bj.CompletedAt)
+			}
+
 			if bj.Source != nil {
 				fmt.Printf("Source:      %s %s", bj.Source.Type, bj.Source.URL)
 				if bj.Source.Revision != "" {

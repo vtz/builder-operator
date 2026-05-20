@@ -24,6 +24,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +33,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -89,6 +93,7 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("DELETE /v1/namespaces/{namespace}/buildjobs/{name}", s.handleDelete)
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/logs", s.handleLogs)
 	mux.HandleFunc("POST /v1/namespaces/{namespace}/buildjobs/{name}/artifacts/upload", s.handleArtifactUpload)
+	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/history", s.handleHistory)
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/artifacts", s.handleArtifactList)
 	mux.HandleFunc("GET /v1/namespaces/{namespace}/buildjobs/{name}/artifacts/{filename}", s.handleArtifactDownload)
 	mux.HandleFunc("GET /v1/cli/{os}/{arch}", s.handleCLIDownload)
@@ -491,7 +496,11 @@ func (s *Server) handleArtifactList(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		files = append(files, ArtifactFileInfo{Name: e.Name(), Size: info.Size()})
+		files = append(files, ArtifactFileInfo{
+			Name:    e.Name(),
+			Size:    info.Size(),
+			ModTime: info.ModTime().UTC().Format(time.RFC3339),
+		})
 	}
 	writeJSON(w, http.StatusOK, ArtifactListResponse{BuildJob: name, Namespace: ns, Files: files})
 }
@@ -558,9 +567,123 @@ func toSummary(bj *buildv1alpha1.BuildJob) BuildJobSummary {
 
 	if !bj.CreationTimestamp.IsZero() {
 		summary.Age = time.Since(bj.CreationTimestamp.Time).Truncate(time.Second).String()
+		summary.CreatedAt = bj.CreationTimestamp.UTC().Format(time.RFC3339)
+	}
+
+	if bj.Status.LastRunAt != "" {
+		summary.StartedAt = bj.Status.LastRunAt
+	}
+
+	if (bj.Status.Phase == buildv1alpha1.PhaseSucceeded || bj.Status.Phase == buildv1alpha1.PhaseFailed) && bj.Status.LastRunAt != "" {
+		for _, c := range bj.Status.Conditions {
+			if c.Type == "Ready" && !c.LastTransitionTime.IsZero() {
+				summary.CompletedAt = c.LastTransitionTime.UTC().Format(time.RFC3339)
+				break
+			}
+		}
 	}
 
 	return summary
+}
+
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	ns := r.PathValue("namespace")
+	name := r.PathValue("name")
+
+	var bj buildv1alpha1.BuildJob
+	if err := s.Client.Get(r.Context(), client.ObjectKey{Namespace: ns, Name: name}, &bj); err != nil {
+		if apierrors.IsNotFound(err) {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("BuildJob %q not found in namespace %q", name, ns))
+		} else {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("getting BuildJob: %v", err))
+		}
+		return
+	}
+
+	var prList unstructured.UnstructuredList
+	prList.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRunList"})
+	if err := s.Client.List(r.Context(), &prList, client.InNamespace(ns), client.MatchingLabels{
+		buildv1alpha1.LabelBuildJob: name,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("listing PipelineRuns: %v", err))
+		return
+	}
+
+	entries := make([]BuildHistoryEntry, 0, len(prList.Items))
+	for _, pr := range prList.Items {
+		entry := BuildHistoryEntry{
+			Name: pr.GetName(),
+		}
+
+		parts := strings.Split(pr.GetName(), "-run")
+		if len(parts) > 1 {
+			if n, err := strconv.ParseInt(parts[len(parts)-1], 10, 64); err == nil {
+				entry.Run = n
+			}
+		}
+
+		startTime, _, _ := unstructured.NestedString(pr.Object, "status", "startTime")
+		if startTime != "" {
+			entry.StartedAt = startTime
+		}
+
+		completionTime, _, _ := unstructured.NestedString(pr.Object, "status", "completionTime")
+		if completionTime != "" {
+			entry.CompletedAt = completionTime
+		}
+
+		if startTime != "" && completionTime != "" {
+			if st, err := time.Parse(time.RFC3339, startTime); err == nil {
+				if ct, err := time.Parse(time.RFC3339, completionTime); err == nil {
+					entry.Duration = ct.Sub(st).Truncate(time.Second).String()
+				}
+			}
+		}
+
+		conditions, _, _ := unstructured.NestedSlice(pr.Object, "status", "conditions")
+		entry.Phase = "Running"
+		for _, c := range conditions {
+			m, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			t, _, _ := unstructured.NestedString(m, "type")
+			s, _, _ := unstructured.NestedString(m, "status")
+			if t == "Succeeded" {
+				switch s {
+				case "True":
+					entry.Phase = "Succeeded"
+				case "False":
+					entry.Phase = "Failed"
+				}
+			}
+		}
+
+		if startTime == "" && entry.Phase == "Running" {
+			entry.Phase = "Pending"
+		}
+
+		results, _, _ := unstructured.NestedSlice(pr.Object, "status", "results")
+		for _, result := range results {
+			m, ok := result.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			rName, _, _ := unstructured.NestedString(m, "name")
+			rValue, _, _ := unstructured.NestedString(m, "value")
+			if rName == "commit-sha" && rValue != "" {
+				entry.CommitSHA = rValue
+			}
+		}
+
+		entries = append(entries, entry)
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Run > entries[j].Run
+	})
+
+	writeJSON(w, http.StatusOK, BuildHistoryResponse{BuildJob: name, Entries: entries})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
