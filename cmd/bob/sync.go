@@ -209,7 +209,7 @@ func restoreGitSource(kubecli, namespace, bjName string) error {
 	return nil
 }
 
-var syncExcludes = []string{".git", "node_modules", "__pycache__", ".tox", ".venv", "build", ".bob-output"}
+var syncExcludes = []string{".git", "node_modules", "__pycache__", ".tox", ".venv", "build", "build_*", "out_*", ".bob-output", "*.qcow2", "*.img", "*.iso"}
 
 func buildJobArch(kubecli, namespace, bjName string) string {
 	out, err := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
