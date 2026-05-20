@@ -50,6 +50,7 @@ const (
 	conditionTypeSucceeded = "Succeeded"
 	conditionStatusTrue    = "True"
 	conditionStatusFalse   = "False"
+	conditionStatusUnknown = "Unknown"
 )
 
 type Server struct {
@@ -657,7 +658,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 				switch s {
 				case conditionStatusTrue:
 					entry.Phase = string(buildv1alpha1.PhaseSucceeded)
-				case conditionStatusFalse:
+				case conditionStatusFalse, conditionStatusUnknown:
 					entry.Phase = string(buildv1alpha1.PhaseFailed)
 				}
 			}
