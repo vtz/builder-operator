@@ -35,7 +35,7 @@ func newListCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tPHASE\tBOARD\tPLATFORM\tREVISION\tCOMMIT\tAGE\tSOURCE")
+			fmt.Fprintln(w, "NAME\tPHASE\tBOARD\tPLATFORM\tREVISION\tCOMMIT\tCREATED\tSOURCE")
 			for _, item := range items {
 				source := ""
 				revision := ""
@@ -51,12 +51,12 @@ func newListCmd() *cobra.Command {
 				if len(commit) > 8 {
 					commit = commit[:8]
 				}
-				age := item.Age
-				if age == "" && item.CreatedAt != "" {
-					age = item.CreatedAt
+				created := item.CreatedAt
+				if created == "" {
+					created = "-"
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					item.Name, item.Phase, item.Board, item.Platform, revision, commit, age, source)
+					item.Name, item.Phase, item.Board, item.Platform, revision, commit, created, source)
 			}
 			return w.Flush()
 		},
