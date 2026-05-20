@@ -209,7 +209,9 @@ func restoreGitSource(kubecli, namespace, bjName string) error {
 	return nil
 }
 
-var syncExcludes = []string{".git", "node_modules", "__pycache__", ".tox", ".venv", "build", "build_*", "out_*", ".bob-output", "*.qcow2", "*.img", "*.iso"}
+var syncExcludes = []string{".git", "node_modules", "__pycache__", ".tox", ".venv", "build", ".bob-output", "*.qcow2", "*.img", "*.iso"}
+
+var syncDirExcludes = []string{"build_*", "out_*"}
 
 func buildJobArch(kubecli, namespace, bjName string) string {
 	out, err := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
@@ -387,6 +389,9 @@ func rsyncUpload(kubecli, podName, namespace, srcDir, destPath string) error {
 	for _, ex := range syncExcludes {
 		args = append(args, fmt.Sprintf("--exclude=%s", ex))
 	}
+	for _, ex := range syncDirExcludes {
+		args = append(args, fmt.Sprintf("--exclude=%s", ex))
+	}
 	args = append(args, src, dest)
 
 	fmt.Print("Syncing files (rsync)... ")
@@ -453,7 +458,7 @@ func tarDirectory(dir string, w io.Writer) (int, error) {
 			return nil
 		}
 
-		if shouldSkipPath(rel) {
+		if shouldSkipPath(rel, info.IsDir()) {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
@@ -504,11 +509,18 @@ func tarDirectory(dir string, w io.Writer) (int, error) {
 	return count, gw.Close()
 }
 
-func shouldSkipPath(rel string) bool {
+func shouldSkipPath(rel string, isDir bool) bool {
 	base := filepath.Base(rel)
-	for _, s := range syncExcludes {
-		if base == s {
+	for _, pattern := range syncExcludes {
+		if matched, _ := filepath.Match(pattern, base); matched {
 			return true
+		}
+	}
+	if isDir {
+		for _, pattern := range syncDirExcludes {
+			if matched, _ := filepath.Match(pattern, base); matched {
+				return true
+			}
 		}
 	}
 	return false

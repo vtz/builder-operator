@@ -113,27 +113,37 @@ func TestTarDirectory_EmptyDir(t *testing.T) {
 
 func TestShouldSkipPath(t *testing.T) {
 	tests := []struct {
-		path string
-		want bool
+		path  string
+		isDir bool
+		want  bool
 	}{
-		{".git", true},
-		{"node_modules", true},
-		{"__pycache__", true},
-		{".tox", true},
-		{".venv", true},
-		{"build", true},
-		{".bob-output", true},
-		{"src", false},
-		{"main.go", false},
-		{"Makefile", false},
-		{"README.md", false},
-		{filepath.Join("src", ".git"), true},
+		{".git", true, true},
+		{"node_modules", true, true},
+		{"__pycache__", true, true},
+		{".tox", true, true},
+		{".venv", true, true},
+		{"build", true, true},
+		{"build_h755", true, true},
+		{"build_matrix.json", false, false},
+		{"out_mcu", true, true},
+		{"out_hpc", true, true},
+		{".bob-output", true, true},
+		{"firmware.qcow2", false, true},
+		{"disk.img", false, true},
+		{"install.iso", false, true},
+		{"src", true, false},
+		{"main.go", false, false},
+		{"Makefile", false, false},
+		{"README.md", false, false},
+		{"build.go", false, false},
+		{"output.txt", false, false},
+		{filepath.Join("src", ".git"), true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got := shouldSkipPath(tt.path)
+			got := shouldSkipPath(tt.path, tt.isDir)
 			if got != tt.want {
-				t.Errorf("shouldSkipPath(%q) = %v, want %v", tt.path, got, tt.want)
+				t.Errorf("shouldSkipPath(%q, %v) = %v, want %v", tt.path, tt.isDir, got, tt.want)
 			}
 		})
 	}
