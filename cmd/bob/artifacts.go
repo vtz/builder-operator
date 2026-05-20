@@ -89,9 +89,9 @@ func newArtifactsCmd() *cobra.Command {
 			}
 
 			tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-			fmt.Fprintln(tw, "NAME\tSIZE")
+			fmt.Fprintln(tw, "NAME\tSIZE\tMODIFIED")
 			for _, f := range resp.Files {
-				fmt.Fprintf(tw, "%s\t%s\n", f.Name, humanSize(f.Size))
+				fmt.Fprintf(tw, "%s\t%s\t%s\n", f.Name, humanSize(f.Size), f.ModTime)
 			}
 			tw.Flush()
 

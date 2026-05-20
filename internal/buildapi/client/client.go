@@ -169,6 +169,19 @@ func (c *Client) DownloadArtifact(ctx context.Context, name, filename string) (i
 	return resp.Body, nil
 }
 
+func (c *Client) History(ctx context.Context, name string) (*buildapi.BuildHistoryResponse, error) {
+	url := fmt.Sprintf("%s/v1/namespaces/%s/buildjobs/%s/history", c.BaseURL, c.Namespace, name)
+	body, err := c.doGet(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	var resp buildapi.BuildHistoryResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &resp, nil
+}
+
 func (c *Client) doGet(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
