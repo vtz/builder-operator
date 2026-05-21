@@ -99,10 +99,11 @@ regardless.`,
 			if len(args) == 0 {
 				return fmt.Errorf("provide a BuildJob name or use -f <file>")
 			}
-			if err := autoRestoreIfLocal(ns, args[0]); err != nil {
+			restored, err := autoRestoreIfLocal(ns, args[0])
+			if err != nil {
 				return fmt.Errorf("restoring git source: %w", err)
 			}
-			if downloadDir != "" && !force {
+			if downloadDir != "" && !force && !restored {
 				if skipped, err := downloadIfUpToDate(cmd.Context(), args[0], downloadDir, skipVerify); err != nil {
 					return err
 				} else if skipped {
@@ -194,17 +195,17 @@ func createFromFile(ctx context.Context, path string, branch string) (string, er
 	return result.Name, nil
 }
 
-func autoRestoreIfLocal(namespace, bjName string) error {
+func autoRestoreIfLocal(namespace, bjName string) (restored bool, err error) {
 	kubecli := detectKubeClient()
 	if kubecli == "" {
-		return nil
+		return false, nil
 	}
 	out, _ := exec.Command(kubecli, "get", "buildjob", bjName, "-n", namespace,
 		"-o", `jsonpath={.metadata.annotations.builder\.sdv\.cloud\.redhat\.com/original-source}`).CombinedOutput()
 	if len(out) > 0 && string(out) != "" {
-		return restoreGitSource(kubecli, namespace, bjName)
+		return true, restoreGitSource(kubecli, namespace, bjName)
 	}
-	return nil
+	return false, nil
 }
 
 func retrigger(ctx context.Context, name string) error {
