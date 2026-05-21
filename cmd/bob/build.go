@@ -39,6 +39,7 @@ func newBuildCmd() *cobra.Command {
 	var pvcName string
 	var downloadDir string
 	var skipVerify bool
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "build [name]",
@@ -50,13 +51,15 @@ func newBuildCmd() *cobra.Command {
   bob build body-ecu-nucleo                        # re-trigger existing BuildJob
   bob build body-ecu-mpu-hostlike --local                  # sync . and build
   bob build body-ecu-mpu-hostlike --local --source ~/code  # sync specific dir
-  bob build body-ecu-nucleo -d ./out              # build and download artifacts
+  bob build body-ecu-nucleo -d ./out              # download artifacts (rebuild only if needed)
+  bob build body-ecu-nucleo -d ./out --force      # force rebuild and download
 
 When --local is used, the BuildJob is temporarily switched to use your local
 source. The next build without --local automatically restores git source.
 
-When -d is used, the CLI waits for the build to complete and automatically
-downloads the resulting artifacts to the specified directory.`,
+When -d is used, the CLI checks if the build already succeeded. If so, it
+downloads the existing artifacts without retriggering. Use --force to rebuild
+regardless.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ns := firstNonEmpty(bobNamespace, os.Getenv("BOB_NAMESPACE"), "bob-builds")
 			if local {
@@ -99,6 +102,13 @@ downloads the resulting artifacts to the specified directory.`,
 			if err := autoRestoreIfLocal(ns, args[0]); err != nil {
 				return fmt.Errorf("restoring git source: %w", err)
 			}
+			if downloadDir != "" && !force {
+				if skipped, err := downloadIfUpToDate(cmd.Context(), args[0], downloadDir, skipVerify); err != nil {
+					return err
+				} else if skipped {
+					return nil
+				}
+			}
 			if err := retrigger(cmd.Context(), args[0]); err != nil {
 				return err
 			}
@@ -116,6 +126,7 @@ downloads the resulting artifacts to the specified directory.`,
 	cmd.Flags().StringVar(&pvcName, "pvc", "source-code", "PVC name for local source upload")
 	cmd.Flags().StringVarP(&downloadDir, "download", "d", "", "Wait for build to finish and download artifacts to this directory")
 	cmd.Flags().BoolVar(&skipVerify, "skip-verify", false, "Skip cosign signature verification on download")
+	cmd.Flags().BoolVar(&force, "force", false, "Force a new build even if the last one succeeded")
 	return cmd
 }
 

@@ -29,6 +29,32 @@ const (
 	buildStartupTimeout = 2 * time.Minute
 )
 
+// downloadIfUpToDate checks if the build already succeeded and downloads
+// artifacts without triggering a new run. Returns (true, nil) if artifacts
+// were downloaded, (false, nil) if a new build is needed.
+func downloadIfUpToDate(ctx context.Context, name, downloadDir string, skipVerify bool) (bool, error) {
+	c := newClient()
+	build, err := c.Get(ctx, name)
+	if err != nil {
+		return false, fmt.Errorf("getting build status: %w", err)
+	}
+
+	if build.Phase != "Succeeded" {
+		return false, nil
+	}
+
+	fmt.Printf("Build %q already up-to-date, skipping rebuild.\n", name)
+	fmt.Printf("  Run:    %s\n", build.PipelineRun)
+	if build.CommitSHA != "" {
+		fmt.Printf("  Commit: %s\n", build.CommitSHA)
+	}
+	if build.Image != "" {
+		fmt.Printf("  Image:  %s\n", build.Image)
+	}
+	fmt.Println()
+	return true, downloadBuildArtifacts(ctx, c, build, downloadDir, skipVerify)
+}
+
 func waitAndDownload(ctx context.Context, name, downloadDir string, skipVerify bool) error {
 	c := newClient()
 
