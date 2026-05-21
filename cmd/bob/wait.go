@@ -56,10 +56,14 @@ func waitAndDownload(ctx context.Context, name, downloadDir string, skipVerify b
 		}
 
 		if !buildStarted {
-			if build.PipelineRun != previousRun {
+			switch {
+			case build.PipelineRun != previousRun:
 				buildStarted = true
 				fmt.Printf("  New PipelineRun: %s\n", build.PipelineRun)
-			} else if build.Phase == "Succeeded" || build.Phase == "Failed" {
+			case build.Phase == "Running" || build.Phase == "Pending":
+				buildStarted = true
+				fmt.Printf("  PipelineRun: %s\n", build.PipelineRun)
+			case build.Phase == "Succeeded" || build.Phase == "Failed":
 				if time.Since(start) > buildStartupTimeout {
 					fmt.Printf("  Build already completed (run %s), downloading existing artifacts.\n", build.PipelineRun)
 					buildStarted = true
