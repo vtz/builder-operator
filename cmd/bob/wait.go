@@ -25,15 +25,23 @@ import (
 )
 
 const (
-	buildPollInterval = 5 * time.Second
+	buildPollInterval   = 5 * time.Second
+	buildStartupTimeout = 2 * time.Minute
 )
 
 func waitAndDownload(ctx context.Context, name, downloadDir string, skipVerify bool) error {
 	c := newClient()
 
+	initial, err := c.Get(ctx, name)
+	if err != nil {
+		return fmt.Errorf("getting build status: %w", err)
+	}
+	previousRun := initial.PipelineRun
+
 	fmt.Printf("\nWaiting for build %q to complete...\n", name)
 	start := time.Now()
 	lastPhase := ""
+	buildStarted := false
 
 	for {
 		select {
@@ -45,6 +53,30 @@ func waitAndDownload(ctx context.Context, name, downloadDir string, skipVerify b
 		build, err := c.Get(ctx, name)
 		if err != nil {
 			return fmt.Errorf("polling build status: %w", err)
+		}
+
+		if !buildStarted {
+			switch {
+			case build.PipelineRun != previousRun:
+				buildStarted = true
+				fmt.Printf("  New PipelineRun: %s\n", build.PipelineRun)
+			case build.Phase == "Running" || build.Phase == "Pending":
+				buildStarted = true
+				fmt.Printf("  PipelineRun: %s\n", build.PipelineRun)
+			case build.Phase == "Succeeded" || build.Phase == "Failed":
+				if time.Since(start) > buildStartupTimeout {
+					fmt.Printf("  Build already completed (run %s), downloading existing artifacts.\n", build.PipelineRun)
+					buildStarted = true
+				} else {
+					time.Sleep(buildPollInterval)
+					continue
+				}
+			}
+		}
+
+		if !buildStarted {
+			time.Sleep(buildPollInterval)
+			continue
 		}
 
 		if build.Phase != lastPhase {
