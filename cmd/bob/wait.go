@@ -27,7 +27,38 @@ import (
 const (
 	buildPollInterval   = 5 * time.Second
 	buildStartupTimeout = 2 * time.Minute
+
+	phaseSucceeded = "Succeeded"
+	phaseFailed    = "Failed"
+	phaseRunning   = "Running"
+	phasePending   = "Pending"
 )
+
+// downloadIfUpToDate checks if the build already succeeded and downloads
+// artifacts without triggering a new run. Returns (true, nil) if artifacts
+// were downloaded, (false, nil) if a new build is needed.
+func downloadIfUpToDate(ctx context.Context, name, downloadDir string, skipVerify bool) (bool, error) {
+	c := newClient()
+	build, err := c.Get(ctx, name)
+	if err != nil {
+		return false, fmt.Errorf("getting build status: %w", err)
+	}
+
+	if build.Phase != phaseSucceeded {
+		return false, nil
+	}
+
+	fmt.Printf("Build %q already up-to-date, skipping rebuild.\n", name)
+	fmt.Printf("  Run:    %s\n", build.PipelineRun)
+	if build.CommitSHA != "" {
+		fmt.Printf("  Commit: %s\n", build.CommitSHA)
+	}
+	if build.Image != "" {
+		fmt.Printf("  Image:  %s\n", build.Image)
+	}
+	fmt.Println()
+	return true, downloadBuildArtifacts(ctx, c, build, downloadDir, skipVerify)
+}
 
 func waitAndDownload(ctx context.Context, name, downloadDir string, skipVerify bool) error {
 	c := newClient()
@@ -60,10 +91,10 @@ func waitAndDownload(ctx context.Context, name, downloadDir string, skipVerify b
 			case build.PipelineRun != previousRun:
 				buildStarted = true
 				fmt.Printf("  New PipelineRun: %s\n", build.PipelineRun)
-			case build.Phase == "Running" || build.Phase == "Pending":
+			case build.Phase == phaseRunning || build.Phase == phasePending:
 				buildStarted = true
 				fmt.Printf("  PipelineRun: %s\n", build.PipelineRun)
-			case build.Phase == "Succeeded" || build.Phase == "Failed":
+			case build.Phase == phaseSucceeded || build.Phase == phaseFailed:
 				if time.Since(start) > buildStartupTimeout {
 					fmt.Printf("  Build already completed (run %s), downloading existing artifacts.\n", build.PipelineRun)
 					buildStarted = true
@@ -86,10 +117,10 @@ func waitAndDownload(ctx context.Context, name, downloadDir string, skipVerify b
 		}
 
 		switch build.Phase {
-		case "Succeeded":
+		case phaseSucceeded:
 			fmt.Printf("\nBuild succeeded in %s\n", time.Since(start).Truncate(time.Second))
 			return downloadBuildArtifacts(ctx, c, build, downloadDir, skipVerify)
-		case "Failed":
+		case phaseFailed:
 			fmt.Fprintf(os.Stderr, "\nBuild failed after %s\n", time.Since(start).Truncate(time.Second))
 			fmt.Fprintf(os.Stderr, "View logs with: bob logs %s\n", name)
 			return fmt.Errorf("build %q failed", name)
